@@ -1,0 +1,55 @@
+---
+title: "01_ReadRawData"
+author: "Bharvi Dhall"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# "Code to read in spss data files from Wave 1, 2  and 3"
+# save as rds datasets
+
+This file reads the GUI and time use datasets from the three waves and creates R objects for them. The resulted R objects are saved in the Data folder.
+
+
+# Set file path
+
+```{r}
+library(here)
+here()
+  
+```
+
+# Loading libraries
+
+```{r}
+# loading libraries
+
+library(tidyverse)
+library(haven)
+
+```
+
+
+# Reading dataset for  Wave 4 Convention A
+
+```{r}
+# Read the dataset into R
+
+here::i_am("GUI-Wave4-Analysis/01_ReadRawData.Rmd")
+#This line of code directs to the R script where code is located.
+
+wave4 <- haven::read_spss(here("GUI-Wave4-Analysis","RawData","GUI_Data_ChildCohortWave4.sav"),  
+                              user_na = TRUE) 
+
+#user_na If TRUE variables with user defined missing will be read into labelled_spss()objects. If FALSE, the default, user-defined missings will be converted to NA
+
+dim(wave4)
+#[1] 5190  863
+
+# Saving wave1_gui as .Rdata
+saveRDS( wave4, here("GUI-Wave4-Analysis","Robject", "Wave3_GUI_21yr.RDS"))
+
+```

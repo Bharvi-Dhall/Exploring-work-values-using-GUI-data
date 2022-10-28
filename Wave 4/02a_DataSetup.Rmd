@@ -1,0 +1,467 @@
+---
+title: "02_DataSetup"
+author: "Bharvi Dhall"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width=5, fig.height=5, figs="figsBD/")
+```
+
+# Setup CATA data by subsetting data from Wave 4
+File contains the code to get a subset of data set (GUI wave 4) concerning career choices from GUI wave 4
+
+# Set file path
+
+```{r}
+library(here)
+here()
+  
+```
+
+# Loading Libraries
+
+```{r}
+library(tidyverse)
+library(labelled)
+library(haven)
+library(ggplot2)
+library(here)
+library(sjlabelled) 
+library(Hmisc) #for assigning labels
+library(manyModelViz) # for creating heatmap plots
+library(GGally) #for visualizing multiple models
+library(tidymodels) # for creating generic model formulas
+library(ggeffects)
+library(performance) # for R-squared
+library(pROC)#for ROC curve
+library(scales)
+```
+
+
+# Reading GUI dataset from wave 4
+
+```{r}
+here::i_am("GUI-Wave4-Analysis/01_ReadRawData.Rmd")
+wave.4 <- readRDS(here("GUI-Wave4-Analysis","Robject", "Wave3_GUI_21yr.RDS"))
+
+data.4 <- wave.4 %>%
+  mutate_if(
+    is.labelled,
+    ~as_factor(.x)
+  )
+
+dim(data.4)
+
+table(data.4$p2sexW4)
+
+#View(data.4)
+```
+
+
+
+
+# Variables of Interest
+
+
+cq4J5a - cq4J5l
+
+Table 2: The table contains description of work values
+
+
+| Name         | Value |   
+|--------------|----------------------------|
+| cq4J5a | a high income | E
+| cq4J5b | offered good training opportunities | I
+| cq4J5c | offered good promotion opportunities |
+| cq4J5d | an interesting job | I
+| cq4J5e | flexible working hours | E
+| cq4J5f | generous holidays/time off |  E
+| cq4J5g | a good step on the career ladder |
+| cq4J5h | be your own boss |  
+| cq4J5i | a job which allows you to be creative |  I
+| cq4J5j | a job that is useful to society or helps other people|  I
+| cq4J5k | job security |  E
+| cq4J5l | opportunity to travel/work abroad |  E
+
+
+
+
+Correlation plot of ranked choices
+```{r}
+wave_4_dict <- labelled::generate_dictionary(data.4)
+
+
+wave_4_dict %>% filter(str_detect(variable, "cq4J5"))%>% select(pos, variable, label,col_type)
+
+#For the purpose of this analysis, all the NA's have been coded as No.
+
+#Taking subset of the variables of Interest
+sub4 <- data.4[,c(1,504:515)]
+
+
+# Loading named vector
+source(here("GUI-Wave4-Analysis/vars.R"))
+
+# Creating a named vector
+dd <- Hmisc::upData(sub4,labels = var.labels)
+
+#View(data)
+
+attributes(dd$cq4J5a)
+
+# changing labels to column names
+names(dd) <- colnames(label_to_colnames(dd))  # uses sjlabelled
+
+names(dd)
+
+View(dd)
+
+#correlation matrix
+
+library("dplyr")
+ dd %>%
+   mutate(dplyr::across(high_inc:travel_abroad, as.numeric)) -> dd
+
+
+# Correlation matrix of items
+cormat <- dd %>%
+  select(-1) %>%
+  cor(method = "spearman", use = "pairwise.complete.obs")
+
+# Activate the corrplot package
+library("corrplot")
+
+# Correlation matrix plot
+corrplot(cormat, # correlation matrix
+         order = "hclust", # hierarchical clustering of correlation
+         tl.col = "black") # number of rectangles to draw around clusters
+
+# males
+
+summarise(dd)
+
+
+
+#females
+
+
+
+```
+
+
+```{r}
+#View(sub4) Do very imp as 1 else 0
+
+#df4 <- sub4 %>%  mutate(across(starts_with("cq4J5"), ~ifelse(.x == 10,1,0)), across(starts_with("cq4J5"), ~replace_na(.x, 0)))
+
+#View(df4)
+#dim(df4)
+
+
+# As per Catherine's suggestion for choosing top 3 choices
+#changing work val to numeric
+sub4_new <- sub4 %>%
+  mutate(dplyr::across(starts_with("cq4J5"),as.character)) %>%
+  mutate(dplyr::across(starts_with("cq4J5"),as.numeric)) 
+#5190 X13
+
+#getting rid of 999
+sub4_new <- sub4_new %>%
+  filter(cq4J5a != 99)
+#5183 X13
+
+# Select top 3 choices by first sorting by rank and then choices ranked at pos 10 or higher as there are 12 work values to choose from and taking them as one
+df4 <- sub4_new %>%
+  select(-1) %>%
+  mutate(across(.cols=tidyselect::everything(), ~replace_na(.x, 0))) %>%
+  apply(1, function(x) ifelse(x >= sort(x)[10],1,0))  %>% t() %>% as.data.frame() %>% add_column(ID=sub4_new$ID,.before = 1)
+
+rownames(df4) <- NULL
+# Loading named vector
+source(here("GUI-Wave4-Analysis/vars.R"))
+
+# Creating a named vector
+data <- Hmisc::upData(df4,labels = var.labels)
+
+#View(data)
+
+attributes(data$cq4J5a)
+
+# changing labels to column names
+names(data) <- colnames(label_to_colnames(data))  # uses sjlabelled
+
+names(data)
+
+# ratings <- sample(10, 13, replace=T)
+# ratings
+# sort(ratings)
+# ifelse(ratings >= sort(ratings)[11], 1,0)
+
+```
+
+
+
+
+
+# Merge
+
+```{r}
+
+
+
+#Load R object of Wave 3
+wave.3 <- readRDS(here("GUI-Wave4-Analysis","Robject", "Cata_W3_sub_tidy.RDS"))
+
+
+w4_sub <- merge(wave.3,data,by.x = "ID", by.y = "ID", all= FALSE)
+# after merging only 4811 left
+
+dim(w4_sub)
+
+#View(w4_sub)
+```
+
+## Fit logistic regression with main effects
+
+We are fitting Logistic regression using all predictors, and then using car::Anova to find the effect of each predictor on the response variable (Is there any significant association between the drivers and workvalues?)
+
+
+```{r Main_effects}
+# Making a vector for response variables
+y <- w4_sub[,32:43] # omit other
+names(y)
+
+
+#get rid of IDs and create a dataframe for predictors
+x <- w4_sub[,-c(2:12,32:43,1,27)]
+
+# Loading named vector
+source(here("GUI-Wave4-Analysis/vars.R"))
+# Creating a named vector
+x <- Hmisc::upData(x,labels = var.labels)
+
+
+# changing labels to column names
+names(x) <- colnames(label_to_colnames(x))  # uses sjlabelled
+
+names(x)
+
+#Removing 3 work related variables
+x$part_time_job <- NULL
+x$work_for_business <- NULL
+x$work_exp <- NULL
+x$household_region <- NULL
+```
+
+
+```{r Main_effects2}
+# Fitting logistic regression on main effects
+fits <- map(y, ~ glm(.x ~ . ,family="binomial",data=x))
+f <- purrr::map_dfr(fits, ~ broom::tidy(car::Anova(.x)), .id="response")
+f1 <- dplyr::filter(f, term != "Residuals")
+
+# make heatmap
+cols <- c("blue", "cyan", "grey95")
+modelHeatmap(f1, "term", "response", "p.value", xorder="increasing", yorder="increasing")+
+  ggplot2::scale_fill_manual(values = cols)+ ggplot2::xlab("Variables driving Work-Values") + ggplot2::ylab("Work-Values") + ggplot2::ggtitle("Heatmap of 10 Logistic Regression fits of the Work-Values")
+
+# cq3g4f(work imp)  coming significant in main effects
+```
+
+
+## Fit the logistic regressions and check for interactions with gender and fit model with main effects and significant interactions.
+
+```{r}
+
+fits.2 <- map(y, ~ glm(.x ~ (.-gender)*gender ,family="binomial",data=x))
+d <- purrr::map_dfr(fits.2, ~ broom::tidy(car::Anova(.x)), .id="response")
+d1 <- dplyr::filter(d, term != "Residuals")
+#y <- "response"
+d1 <- d1[grep("gender:|:gender", d1$term),] # to check whether term has "gender:"
+d1$term <- sub("gender:|:gender", "",d1$term) # to replace "gender:" with "" for values of terms for all interactions
+
+cols <- c("blue", "cyan", "grey95")
+modelHeatmap(d1, "term", "response", "p.value", xorder="increasing", yorder="increasing")+
+  ggplot2::scale_fill_manual(values = cols)+ ggplot2::xlab("Variables associated with Work-Values") + ggplot2::ylab("Work-Values") + ggplot2::ggtitle("Interactions with Gender")
+```
+
+The significant interactions with gender are: work_imp:gender, (highly) TY:gender (sig)
+
+- get rid of vars: PC1_emp and left school
+
+
+## Selecting interaction terms.
+Selecting highly significant interaction (only dark blue)
+```{r final_model}
+sig_int_vars2 <- d1 %>% filter(p.value<=0.01) %>% select(term) %>% unique() %>% deframe()
+
+# Getting rid of some predictors
+x1 <- x %>%
+  dplyr::select(-c("PC1_emp" , "left_school"))
+
+
+
+# Refit model
+fits.1 <- map(y, ~ glm(.x ~ . +work_imp*gender+
+                           TY*gender ,
+                       family="binomial",data=x1))
+
+
+
+d_new <- purrr::map_dfr(fits.1, ~ broom::tidy(car::Anova(.x)), .id="response")
+d1_new <- dplyr::filter(d_new, term != "Residuals")
+
+cols <- c("blue", "cyan", "grey95")
+final.plot <- modelHeatmap(d1_new, "term", "response", "p.value", xorder="increasing", yorder="increasing")+
+  ggplot2::scale_fill_manual(values = cols)+ggplot2::xlab("Variables associated with Work-Values") + ggplot2::ylab("Work-Values") + ggplot2::ggtitle("Significant Interactions with Gender")
+
+final.plot
+########################################################
+# plot the interactions and their main effects together
+reorder_pred <- c("cognitive_scores","gender","conscientious_score","TY","gender:TY","work_imp","gender:work_imp","equalised_inc","PC1_edu","career_guidance","own_family_imp","parental_interactions","religion_imp","school_type")
+
+
+
+plot1 <- modelHeatmap(d1_new, "term", "response", "p.value", xorder=reorder_pred, yorder="increasing") +
+  ggplot2::scale_fill_manual(values = cols) +
+  ggplot2::xlab("Potential Factors") +
+  ggplot2::ylab("Work-Values") +
+  ggplot2::ggtitle("Final Model revealing Variables associated with Work Values")
+
+plot1
+
+
+```
+
+# Some exploratory plot
+
+```{r}
+
+library(ggupset)
+library(here)
+library(tidyverse)
+library(patchwork)
+
+
+
+df1<- as.matrix(data)
+
+catavars <- c("high_inc", "training_opp","promotion_opp","interesting_job","flex_hours","time_off", "good_for_career", "being_boss" ,  "creative_job","help_society","job_security" ,"travel_abroad")
+df4$choice <- lapply(1:nrow(df1), function(i) catavars[df1[i,]==1])
+
+
+
+#df3 <- dim(df4[sapply(df4$choice, length) ==9,])
+
+#choose 3 - 1438
+# choose 4- 1156
+#choose 10 -97
+
+names(df4)
+
+saveRDS( df4, here("GUI-Wave4-Analysis","Robject", "df4.RDS"))
+```
+
+
+## Basic bar charts
+
+```{r, fig.width=7}
+names(df4)[2:13]<- catavars
+
+#adding gender
+dfgen <- data.4 %>%
+  filter(cq4J5a != "99")
+
+df4$gender <- dfgen$p2sexW4
+
+#recode gender
+df4  <- 
+  df4 %>% mutate(gender = fct_recode(gender, Male = "1",
+                                       Female ="2"))
+  
+colnames(df4)
+
+df4 %>% pivot_longer(cols=high_inc:travel_abroad, names_to = "selection")  %>% 
+  filter(value==1)  %>% 
+  count(selection,gender) %>% 
+  ggplot(aes(x=fct_reorder(selection,n, .desc=T), y=n)) + 
+  geom_col(aes(fill=gender), position="dodge")+   xlab("Selection") + ylab("Count")+theme(axis.text=element_text(angle = 60,size=10, vjust = 0.5, hjust =1),
+        axis.title=element_text(size=14,face="bold"))
+
+
+names(df4)
+```
+
+
+# Plot extrinsic choices and extrinsic
+
+```{r}
+col.ext <- c("high_inc", "flex_hours", "time_off", "job_security", "travel_abroad", "promotion_opp")
+
+df4 %>% pivot_longer(cols=col.ext, names_to = "selection")  %>% 
+  filter(value==1)  %>% 
+  count(selection,gender) %>% 
+  ggplot(aes(x=fct_reorder(selection,n, .desc=T), y=n)) + 
+  geom_col(aes(fill=gender), position="dodge")+   xlab("Selection") + ylab("Count")+theme(axis.text=element_text(angle = 60,size=10, vjust = 0.5, hjust =1),
+        axis.title=element_text(size=14,face="bold"))
+
+
+col.int <- c("interesting_job", "training_opp", "creative_job", "help_society")
+
+df4 %>% pivot_longer(cols=col.int, names_to = "selection")  %>% 
+  filter(value==1)  %>% 
+  count(selection,gender) %>% 
+  ggplot(aes(x=fct_reorder(selection,n, .desc=T), y=n)) + 
+  geom_col(aes(fill=gender), position="dodge")+   xlab("Selection") + ylab("Count")+theme(axis.text=element_text(angle = 60,size=10, vjust = 0.5, hjust =1),
+        axis.title=element_text(size=14,face="bold"))
+
+```
+
+# plot choices = 9 very Impp
+
+```{r}
+ 
+dim(df4 %>% select_if(~max(.)>9))
+```
+
+
+
+There are about equal numbers of men and women in the data.
+Women pick travel and helpSoc more than men, and men pick highInc and flexHrs more than women.
+
+```{r, fig.width=7}
+df4 %>% pivot_longer(cols=high_inc:travel_abroad, names_to = "selection")  %>% 
+  filter(value==1)  %>% 
+  count(selection,gender) %>% 
+  ggplot(aes(x=fct_reorder(selection,n, .desc=T,.fun=diff), y=n)) + 
+  geom_line(color="grey50", aes(group=selection))+
+  geom_point(aes(color=gender), size=4)+ 
+  xlab("Selection") + ylab("Count")+theme(axis.text=element_text(angle = 60,size=10, vjust = 0.5, hjust =1),
+        axis.title=element_text(size=14,face="bold"))
+```
+
+## Basic upset plot, showing top 10 choices
+```{r}
+df3 %>% ggplot(aes(x=choice)) +
+  geom_bar() +
+  scale_x_upset(n_intersections = 10)
+```
+
+About 10% of respondents picked the first choice. These are also the most popular individual choices.
+There are 165 possible choices and about half the respondents chose these 10.
+All of the choices involve interesting job. And most involve highInc.
+Notice some of the choices (trainingOp, boss, other) do not appear here.
+
+We can check how these top choices are split between males and females
+
+## Comparing males and females
+
+```{r}
+df3 %>% ggplot(aes(x=choice, fill=gender)) +
+  geom_bar(position="fill") +
+  scale_x_upset(n_intersections = 10)
+
+#Orange males, blue females
+```

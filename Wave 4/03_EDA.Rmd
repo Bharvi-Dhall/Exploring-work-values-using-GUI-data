@@ -1,0 +1,211 @@
+---
+title: "03_EDA"
+author: "Bharvi Dhall"
+date: "2022-10-16"
+output: html_document
+---
+
+# Setup CATA data by subsetting data from Wave 4
+File contains the code to get a subset of data set (GUI wave 4) concerning career choices from GUI wave 4
+
+# Set file path
+
+```{r}
+library(here)
+here()
+  
+```
+
+# Loading Libraries
+
+```{r}
+library(tidyverse)
+library(labelled)
+library(haven)
+library(ggplot2)
+library(here)
+library(sjlabelled) 
+library(Hmisc) #for assigning labels
+library(manyModelViz) # for creating heatmap plots
+library(GGally) #for visualizing multiple models
+library(tidymodels) # for creating generic model formulas
+library(ggeffects)
+library(performance) # for R-squared
+library(pROC)#for ROC curve
+library(scales)
+```
+
+
+# Reading GUI dataset from wave 4
+
+```{r}
+here::i_am("GUI-Wave4-Analysis/01_ReadRawData.Rmd")
+wave.4 <- readRDS(here("GUI-Wave4-Analysis","Robject", "Wave3_GUI_21yr.RDS"))
+
+data.4 <- wave.4 %>%
+  mutate_if(
+    is.labelled,
+    ~as_factor(.x)
+  )
+
+dim(data.4)
+
+table(data.4$p2sexW4)
+
+#View(data.4)
+```
+
+
+
+
+# Variables of Interest
+
+
+cq4J5a - cq4J5l
+
+Table 2: The table contains description of work values
+
+
+| Name         | Value |   
+|--------------|----------------------------|
+| cq4J5a | a high income | E
+| cq4J5b | offered good training opportunities | I
+| cq4J5c | offered good promotion opportunities |
+| cq4J5d | an interesting job | I
+| cq4J5e | flexible working hours | E
+| cq4J5f | generous holidays/time off |  E
+| cq4J5g | a good step on the career ladder |
+| cq4J5h | be your own boss |  
+| cq4J5i | a job which allows you to be creative |  I
+| cq4J5j | a job that is useful to society or helps other people|  I
+| cq4J5k | job security |  E
+| cq4J5l | opportunity to travel/work abroad |  E
+
+
+
+
+Correlation plot of ranked choices
+```{r}
+wave_4_dict <- labelled::generate_dictionary(data.4)
+
+
+wave_4_dict %>% filter(str_detect(variable, "cq4J5"))%>% select(pos, variable, label,col_type)
+
+#For the purpose of this analysis, all the NA's have been coded as No.
+
+#Taking subset of the variables of Interest
+sub4 <- data.4[,c(1,504:515)]
+
+sub4 <- sub4 %>%
+  mutate(dplyr::across(starts_with("cq4J5"),as.character)) %>%
+  mutate(dplyr::across(starts_with("cq4J5"),as.numeric)) 
+
+
+# Loading named vector
+source(here("GUI-Wave4-Analysis/vars.R"))
+
+# Creating a named vector
+dd <- Hmisc::upData(sub4,labels = var.labels)
+
+#View(data)
+
+attributes(dd$cq4J5a)
+
+# changing labels to column names
+names(dd) <- colnames(label_to_colnames(dd))  # uses sjlabelled
+
+names(dd)
+
+
+```
+
+
+#merge 
+
+```{r}
+# Merge
+
+#Load R object of Wave 3
+wave.3 <- readRDS(here("GUI-Wave4-Analysis","Robject", "Cata_W3_sub_tidy.RDS"))
+
+View(wave.3)
+
+df.merge <- merge(wave.3,dd,by.x = "ID", by.y = "ID", all= FALSE)
+# after merging only 4811 left
+
+dim(df.merge)
+
+#View(df.merge)
+```
+
+
+```{r}
+data_to_work<-df.merge[,c(1,13,32:43)]
+#View(data_to_work)
+
+saveRDS(data_to_work, here("GUI-Wave4-Analysis","Robject", "dw.RDS"))
+
+
+
+dat<-data_to_work %>%
+  pivot_longer(cols = 3:14, names_to = c("work_value"), values_to = "score") %>%
+  na.omit %>%
+  group_by(p2sexW3, work_value, score) %>%
+  summarise(freq = n())
+
+View(dat)
+
+
+r<-dat %>%
+  ggplot(
+    aes(
+      x      = work_value, 
+      y      = score +  (freq / max(freq) * .95) / 2, 
+      height = (freq / max(freq) * .95), 
+      width  = .95,
+      fill   = as.factor(score),
+      label  = freq
+      )
+    ) +
+  geom_tile(show.legend = FALSE) +
+  facet_wrap(~ p2sexW3) +
+  labs(x = 'Work Values', y = 'Importance') +
+  scale_y_discrete(limits = c("0","1","2","3","4","5","6","7","8","9","10")) +
+  theme(
+    axis.ticks.x = element_blank(),
+    axis.text.y  = element_text(hjust = 0, vjust = -0.025),
+    axis.ticks.y = element_blank()
+  )+
+  theme_bw()
+r+theme(axis.text.x  = element_text(angle = 30,size = 10, hjust = 1, vjust = 0.9))
+
+
+
+
+
+
+p<-dat %>%
+  ggplot(
+    aes(
+      x      = work_value, 
+      y      = score +  (freq / max(freq) * .95) / 2, 
+      height = (freq / max(freq) * .95), 
+      width  = .95,
+      fill   = p2sexW3,
+      label  = freq
+      )
+    ) +
+  geom_tile(show.legend = FALSE,position = "dodge") +
+  labs(x = 'Work Values', y = 'Importance') +
+  scale_y_discrete(limits = c("0","1","2","3","4","5","6","7","8","9","10")) +
+  theme(
+    axis.ticks.x = element_blank(),
+    axis.text.y  = element_text(hjust = 0, vjust = -0.025),
+    axis.ticks.y = element_blank()
+  )+
+  theme_bw()
+
+p + theme(axis.text.x  = element_text(angle = 30,size = 10, hjust = 1, vjust = 0.9))
+```
+
+
