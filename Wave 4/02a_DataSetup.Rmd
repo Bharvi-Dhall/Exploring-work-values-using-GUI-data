@@ -335,6 +335,31 @@ plot1
 
 ```
 
+
+
+# Looking at interaction between gender and TY for gender for good for career, promotion opp, training opp
+
+```{r ep-job ,fig.width=14, fig.height=8}
+# Job Security with school type and gender
+g1 <- ggpredict(fits.1$good_for_career, c("TY", "gender"))
+plot(g1)+geom_line(aes(linetype=group), 
+            position=position_dodge(width=.25))
+```
+
+```{r ep-job ,fig.width=14, fig.height=8}
+# Job Security with school type and gender
+g2 <- ggpredict(fits.1$promotion_opp, c("TY", "gender"))
+plot(g2)+geom_line(aes(linetype=group), 
+            position=position_dodge(width=.25))
+```
+
+```{r ep-job ,fig.width=14, fig.height=8}
+# Job Security with school type and gender
+g3 <- ggpredict(fits.1$training_opp, c("TY", "gender"))
+plot(g3)+geom_line(aes(linetype=group), 
+            position=position_dodge(width=.25))
+```
+
 # Some exploratory plot
 
 ```{r}
