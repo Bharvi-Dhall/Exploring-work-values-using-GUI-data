@@ -10,7 +10,7 @@ Research Questions
 Reading in the data files in from wave 4 and storing them as R objects
 
 2. 02a_Datasetup.Rmd 
-Data wrangling for preparing the data for analysis
+Analysis for wave 4 workvalues 
 
 3. 03_EDA.Rmd
-Exploring work values in wave 4
+some exploratory plots
