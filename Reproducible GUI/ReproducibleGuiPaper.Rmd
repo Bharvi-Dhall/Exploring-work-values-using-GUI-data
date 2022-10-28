@@ -1,0 +1,766 @@
+---
+title: Reproducible R workflow for Growing up in Ireland data
+author:
+  # see ?rjournal_article for more information
+  - name: Bharvi Dhall
+    affiliation: Affiliation
+    address:
+    - line 1
+    - line 2
+    url: https://journal.r-project.org
+    orcid: 0000-0002-9079-593X
+    email:  author1@work
+  - name: Catherine Hurley
+    url: https://journal.r-project.org
+    email: author2@work
+    orcid: 0000-0002-9079-593X
+    affiliation: Affiliation 1
+    address:
+    - line 1 affiliation 1
+    - line 2 affiliation 1
+    affiliation2: Affiliation 2
+    address2:
+    - line 1 affiliation 2
+    - line 2 affiliation 2
+  - name: Katarina Domijan
+    url: https://journal.r-project.org
+    email: author3@work
+    affiliation: Affiliation
+    address:
+    - line 1 affiliation
+    - line 2 affiliation
+abstract: >
+  The paper describes the reproducible workflow for datasets from the Growing up in Ireland study
+preamble: |
+  % Any extra LaTeX you need in the preamble
+  
+# per R journal requirement, the bib filename should be the same as the output 
+# tex file. Don't forget to rename the bib file and change this example value.
+bibliography: ReproducibleGuiPaper.bib
+
+output: rticles::rjournal_article
+---
+
+## Introduction
+
+This article outlines analysis project workflow that  we have found to be efficient in making reproducible research reports using R statistical software [@R] with `markdown` [@allaire19] for dynamic document generation, and tidyverse principles [@wickham19] for datasets from the Growing up in Ireland (GUI) National Longitudinal Study of Children [@McNamara2019].
+
+<!-- SENTENCE EXPLAINING WHAT IS GUI. VERSIONS AMF. PRIVACY. GUI data can be obtained -->
+<!-- from WHERE. -->
+
+The Growing Up in Ireland (GUI) is the National Longitudinal Study of children in Ireland. The survey is conducted to study the well-being of children in Ireland. The study was done on two age cohorts - Child and Infant Cohort. For this paper, we would look at the Child Cohort study. The Child Cohort data surveyed 8,568 nine-year-old’s living in Ireland. Since GUI is a longitudinal study, the same participants are followed over time and this information has been published in different waves and two different structures (Anonymised Microdata Files (AMFs) and Research Microdata files (RMF)).The workflow presented in this paper is created using Growing up In Ireland Cohort ’98 (Child Cohort) Wave 3 - 17/18 years. These datasets are made available to researchers on a confidential and anonymised basis through the Irish Social Sciences Data Archive (ISSDA) \footnote{Growing up In Ireland Cohort ’98 (Child Cohort) Wave 3 - 17/18 years, 2016 data set can be accessed through the Irish Social Science Data Archive(ISSDA) \url{https://www.ucd.ie/issda/data/guichild/guichildwave3/}}. The AMF is a publicly available anonymised dataset prepared to protect anonymity of the participants whereas the RMF is a more detailed dataset having raw data which can be accessed by appointment of the researcher as an Officer of Statistics by the Central Statistics Office (CSO). \footnote{Growing up In Ireland Cohort ’98 (Child Cohort) Wave 3 - 17/18 years RMF dataset can be requested through CSA \url{https://www.cso.ie/en/aboutus/lgdp/csodatapolicies/dataforresearchers/rmfregister/}}
+
+
+<!-- WHAT MAKES GUI DIFFERENT FROM OTHER SOCIAL SCIENCE DATASETS. WHY IS THIS ARTICLE USEFUL?  -->
+
+ GUI study is similar to other longitudinal studies like Growing Up in Australia, Growing Up in New Zealand, Growing Up in Scotland and many more. These studies are unique in their design and different from social science datasets as they follow a different naming convention.The anonymised version of the GUI dataset is available in two naming conventions. Convention A is questionnaire based and Convention B is topic- based.We are using Convention A for this paper. In this convention the variable naming is divided into three parts, questionnaire (alpha), section(alpha) and question indicator (alpha/numeric). An example of this presented in Figure \ref{fig:1}.The first two characters indicate the questionnaire in which the question was included; the third character indicates the section within the questionnaire; and the final two characters indicate the question number which is 12 in Section L on the Primary Caregiver Main questionnaire from the Child Cohort Wave 1 datafile.
+ 
+ <!-- \footnote{This figure has been obtained from the document Variable naming and longitudinal data dictionary - Child - Wave 1 & 2 which can be obtained from the Irish Social Science Data Archive website\url{https://www.ucd.ie/issda/data/guichild/guichildwave1/}} -->
+
+ 
+This paper provides a reproducible data pipeline which can be used for preparing such datasets for analysis. 
+
+
+\begin{figure}[h!]
+  \includegraphics[scale=0.6]{ReproducibleGuiPaper_files/figure-latex/ConventionA.png}
+  \caption{Naming Convention A for GUI dataset}
+  \label{fig:1}
+\end{figure}
+
+<!-- https://www.fharrell.com/post/rflow -->
+
+## File Directory Structure
+
+We use RStudio [@RStudio] as integrated development environment (IDE) for
+R in order to facilitate reproducible workflows. We organise all the files associated with a data analysis as RStudio Projects. RStudio also provides simplified access to the tools such as `Git`
+[@Chacon2014] for version control. Git keeps a sequence
+of snapshots (commits) of all tracked files and a git repository tracks the entire project. Git allows traversing the history of all
+commits, visually comparing changes between different versions and switching the repository to a given previous state. We use Github to share and collaborate on projects.
+
+We store the raw GUI data and documentation in a sub directory inside the project directory. These data sub directories are not tracked by Git. 
+
+R scripts within the projects are written assuming that they run from a fresh R process with working directory set to the project directory.
+This is the default behaviour of knitr/rmarkdown documents. 
+
+Launching the R process from the project’s top-level directory sets the working directory to the project directory.
+
+We use the `here` function from the `here` package [@Muller20] to build paths (relative to the top-level directory) when reading or writing files. Here package is easy to use and is efficient for file referencing when a piece of code is utilised by multiple users.
+
+
+```{r warning = FALSE, message = FALSE, echo = FALSE, fig.align = 'center'}
+
+library(here)
+library(tidyverse)
+```
+
+## Labelled data in R
+
+### Read in raw data
+
+
+The GUI datasets are provided as SPSS, SAS, and Stata files. These packages have established infrastructures for labelled data, which consists of metadata in the form of variable and value labels.  A number of R libraries can be used to import SPSS, SAS, and Stata data sets in R, but as we wish to make use of the labelled data features, we use `haven::read_spss` to read in the dataset provided in the SPSS file and save it as a tibble.
+
+
+Code snippet shows reading in dataset for  Wave 3 Convention A
+
+```{r}
+
+here::i_am("ReproducibleGUI/BD_Paper/ReproducibleGUIPaper.Rmd")
+#This line of code directs to the R script where code is located.
+
+wave_3 <- haven::read_spss(here("ReproducibleGUI","BD_Paper","data", "raw", "GUI_Data_17YearCohort_Wave3.sav"),  
+                              user_na = TRUE) 
+#here guides the path to the dataset
+```
+
+
+We usually save the objects as a RDS file as it creates a serialized version of the dataset and then saves it with gzip[@deutsch1996rfc1952] compression which reduces the file size and makes it faster to load.
+```{r eval = FALSE}
+saveRDS( wave_3, here("ReproducibleGUI","BD_Paper","data", "RdsFiles", "Wave3_GUI_17yr.RDS"))
+wave_3 <- readRDS(here("ReproducibleGUI","BD_Paper","data", "RdsFiles", "Wave3_GUI_17yr.RDS"))
+```
+
+
+
+
+### Variable labels
+
+Variable labels are stored in the `label` attribute of each variable. Code snippet below give an example of two variables with their variable names and variable labels.
+
+
+```{r}
+wave_3$CognitiveVocabularyTotal %>% attr('label')
+wave_3$w3cq_workbelief %>% attr("label")
+```
+
+### Value labels
+
+<!-- Packages `haven` introduces `haven_labelled` class, which stores value labels.  -->
+
+
+A labelled vector in SPSS is a data structure that allows assigning text labels to specific values. SPSS file variables with value labels imported using `haven::read_sav` are given a class called  `haven_labelled_spss` and `haven_labelled`.
+
+Not all variables in the GUI datasets are labelled. Code snippet below give examples.
+```{r}
+wave_3$CognitiveVocabularyTotal %>% class()
+wave_3$w3cq_workbelief %>% class()
+```
+
+In R, the value labels are stored in a`labels` attribute. For non-labelled variables this attribute will be empty.
+
+```{r}
+wave_3$CognitiveVocabularyTotal %>% attr('labels')
+wave_3$w3cq_workbelief %>% attr('labels')
+```
+
+<!-- # wave_3 %>%  -->
+<!-- #   select(starts_with("cq3g4")) %>%  -->
+<!-- #   sapply( haven::is.labelled) -->
+<!-- #  -->
+<!-- # wave_3 %>%  -->
+<!-- #   select(starts_with("cq3g4")) %>%  -->
+<!-- #   sapply(attr, which = "labels") -->
+
+To identify if variable is haven_labelled use `haven::is.labelled`
+```{r}
+wave_3$CognitiveVocabularyTotal %>% haven::is.labelled()
+wave_3$w3cq_workbelief %>% haven::is.labelled()
+```
+
+### Data dictionary
+
+Package `labelled`  provides a number of useful tools to manipulate variable and value labels using the haven_labelled and haven_labelled_spss classes introduced in haven.
+
+Function `labelled::generate_dictionary` generates a data dictionary from the variable names and the labels. It is useful to store this in an object before coercing the labelled variables to a standard R class.
+
+```{r}
+wave_3_dict <- labelled::generate_dictionary(wave_3)
+
+# %>% labelled::lookfor_to_long_format()
+wave_3_dict%>% head()
+
+```
+
+One can use `dplyr` and `stringr` functions to lookup subsets of variables from data dictionary. 
+
+```{r}
+wave_3_dict%>% filter(variable=="CognitiveVocabularyTotal" |variable=="w3cq_workbelief") 
+wave_3_dict %>% filter(str_detect(variable, "cq3g4"))%>% select(pos, variable, label, col_type)
+```
+
+
+### Coerce to a standard R class
+
+After importing we coerce `haven_labelled` vectors to a standard R class.
+Note that variable labels can be used for data cleaning and recoding prior to conversion. For example, if one wanted to remove the answers corresponding to "Refusal" and "Don't know" from the analysis, they could be recoded as missing values using the value labels at this stage in the workflow.
+
+
+However, each wave of GUI datasets contains hundreds of variables, so one must be careful, see for example below:
+
+
+```{r}
+wave_3_dict <- labelled::generate_dictionary(wave_3) %>%
+  labelled::lookfor_to_long_format()
+wave_3_dict %>% 
+  filter(!is.na(value_labels)) %>% 
+  select(value_labels) %>%
+  group_by(value_labels) %>% 
+  tally() %>% 
+  arrange(desc(n))
+```
+
+
+At this stage in the workflow we avoid data cleaning and recoding over the entire dataset and prefer to do this on smaller subsets of variables for specific analyses later. 
+For example, for choose all that apply (CATA) variables, non-selection is coded as missing value rather than a separate value and the user would want to recode this as a new factor level beforehand as the distinction between non-selection and no answer should be preserved. See an example in the code snippet below:
+
+```{r}
+wave_3 %>% 
+  select(starts_with("cq3g2")) %>%
+     sapply(attr, "labels")
+
+# labelled::look_for(wave_3 %>% select(starts_with("cq3g2")), "Refusal")
+```
+
+
+
+
+
+<!-- # ```{r} -->
+<!-- # wave_3 %>% select(starts_with("cq3g2")) %>% -->
+<!-- #      sapply(attr, "labels") -->
+<!-- # wave_3 %>% select(CognitiveVocabularyTotal) %>% -->
+<!-- #      sapply(attr, "labels") -->
+<!-- #  -->
+<!-- # ``` -->
+
+
+
+`haven_labelled` vectors can be coerced into numeric and factor classes. As there are thousands of variables and majority of them are categorical we choose to coerce them to factors. In addition, converting to numeric removes value labels whereas converting to factors copies value labels to factor levels. The  factor levels are ordered by value codes. 
+A number of labelled variables in GUI are ordinal or likert scale where the first and last point on the scale will be labelled. They are recoded and converted to numeric variables at a later stage in the workflow.  
+
+We work with factors rather than strings as they are useful in modelling (e.g. one can control the ordering of factor levels) and in visualisation as they allow categorical variables to be mapped to aesthetic attributes \citep{McNamara2018}. 
+
+
+
+Packages `haven`, `labelled`, and `sjlabelled` provide useful functions for the labelled data features. 
+They overlap in functionality and, unfortunately, use different naming schemes for the same operations. For example `haven::as_factor` converts the labelled variables to factors as does `sjlabelled::as_label`. However `sjlabelled::as_factor` performs a different operation. See examples below
+
+```{r}
+haven::as_factor(wave_3$CognitiveVocabularyTotal)%>% levels()
+forcats::as_factor(wave_3$CognitiveVocabularyTotal)%>% levels()
+sjlabelled::as_label(wave_3$CognitiveVocabularyTotal, add.non.labelled = TRUE)%>% levels()
+sjlabelled::as_factor(wave_3$CognitiveVocabularyTotal)%>% levels()
+```
+
+
+Because the naming conventions can mask functions from other libraries, e.g. loading `sjlabelled` library after `forcats` masks `forcats::as_factor` we access functions using double colon operators as opposed to loading the libraries. 
+
+
+
+
+We use `dplyr::mutate_if` and  `haven::is.labelled` to take variables that are labelled and convert them to factors. The numerical variables are unchanged. 
+
+
+
+```{r}
+wave_3 <- wave_3 %>%
+  mutate_if(
+    haven::is.labelled,
+    ~haven::as_factor(.x)
+  )
+```
+
+Attributes are removed  from the factor variables:
+```{r}
+wave_3$CognitiveVocabularyTotal %>% class()
+wave_3$CognitiveVocabularyTotal %>% attr('labels')
+```
+
+
+
+
+
+### Variable names
+
+
+<!-- HOW VARIABLE NAMES ARE CODED IN GUI  -->
+<!-- HOW WE USE THE CODES HERE -->
+
+The Variable name starts with prefix and  relates to a question
+number on the questionnaire from which it orginiates with an exception for the derived variables. For instance the variables which come
+from the Primary Caregiver questionnaire are prefixed with the letters pc, and the question numbers relate to those in the relevant questionnaires. For example,in the variable name pc3f1educ, pc3 describes that it is taken from the primary care givers questionnaire from wave 3 and section F (Respondent's Lifestyle) and the question asked is "What is the highest level of education you have completed".
+
+Blocks of variables appear in the data set in the following order (variable prefixes are shown in brackets):
+-  Household Grid (p1xxW3, p2xxW3)
+-  Parent One Main Questionnaire (pc3)
+-  Parent One Sensitive Questionnaire (pc3s)
+-  Parent Two Main Questionnaire (sc3)
+-  Parent Two Sensitive Questionnaire (sc3s)
+-  Young Person Main Questionnaire (cq3)
+-  Young Person Sensitive Questionnaire (cq3s)
+-  Standardised Scale Scores (w3)
+-  Physical Measurements (w3)
+-  Derived Variables (w3)
+
+
+```{r}
+
+tab <- wave_3_dict %>% 
+  select(variable) %>% 
+  unique() %>% 
+  mutate(name_type = substr(variable, start = 1, stop = 3)) %>%
+  group_by(name_type) %>% 
+  count() %>% 
+  arrange(desc(n))
+
+# df_names %>% mutate(name_type = substr(name, start = 1, stop = 2)) %>% group_by(name_type) %>% count() %>% arrange(desc(n))
+```
+
+```{r}
+
+tab %>%
+  kbl(caption="Top 10 counts of Variables corresponding to different themes",
+       format= "latex",
+   col.names = c("Section","Count"),
+                  align="r") %>%
+   kable_minimal(full_width = F, html_font = "helvetica")
+
+```
+
+TEXT ANALYSIS ON THE NAMES? 
+
+Retaining the original codes for variable names makes it easier to select columns that refer to the answers to the same questions. For example the code below selects answers to question: " Consideration when choosing a job"
+```{r}
+df <- wave_3 %>% select(starts_with("cq3g2"))
+```
+
+
+Or identify questions from a subset of the survey
+```{r}
+wave_3 %>% select(starts_with("p1")) %>% sjlabelled::get_label() %>% enframe()
+```
+
+Investigating the most popular themes. 
+```{r , warning=FALSE,message=FALSE}
+
+#install.packages("tm")  # for text mining
+#install.packages("SnowballC") # for text stemming
+#install.packages("wordcloud") # word-cloud generator 
+#install.packages("RColorBrewer") # color palettes
+# Load
+library("tm")
+library("SnowballC")
+library("wordcloud")
+library("RColorBrewer")
+ 
+df <- wave_3 %>% sjlabelled::get_label() %>% enframe()
+
+df %>% head()
+
+#storing all names to a vector
+text <- df$value
+
+#load data as Corpus
+docs <- Corpus(VectorSource(text))
+
+
+#replacing special characters with space
+toSpace <- content_transformer(function (x , pattern ) gsub(pattern, " ", x))
+docs <- tm_map(docs, toSpace, "/")
+docs <- tm_map(docs, toSpace, "@")
+docs <- tm_map(docs, toSpace, "\\|")
+
+# Convert the text to lower case
+docs <- tm_map(docs, content_transformer(tolower))
+# Remove numbers
+docs <- tm_map(docs, removeNumbers)
+# Remove english common stopwords
+docs <- tm_map(docs, removeWords, stopwords("english"))
+# Remove your own stop word
+# specify your stopwords as a character vector
+docs <- tm_map(docs, removeWords, c("blabla1", "blabla2")) 
+# Remove punctuations
+docs <- tm_map(docs, removePunctuation)
+# Eliminate extra white spaces
+docs <- tm_map(docs, stripWhitespace)
+# Text stemming
+docs <- tm_map(docs, stemDocument)
+
+#Building a text doc matrix
+dtm <- TermDocumentMatrix(docs)
+m <- as.matrix(dtm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+head(d, 10)
+
+#Generate word cloud
+set.seed(1234)
+wordcloud(words = d$word, freq = d$freq, min.freq = 10,
+          max.words=400, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(9, "Dark2"))
+
+```
+
+
+
+At a later stage in the analysis, when one wishes to interpret plots and modelling outputs, using more informative or readable variable names is useful.
+
+
+
+
+
+
+<!-- ```{r} -->
+<!-- ncol(wave_3) -->
+<!-- ``` -->
+
+
+
+<!-- Function `sjlabelled::get_label` allows us to retrieve variable labels from the data and `tibble::enframe` converts this to a dataframe of variable names in R and their longform labels.  -->
+<!-- ```{r} -->
+<!-- df_names <- wave_3 %>% sjlabelled::get_label() %>% enframe() -->
+<!-- ``` -->
+
+
+
+
+<!-- ```{r} -->
+<!-- df_names %>% filter(str_detect(name, "cq3g2")) -->
+<!-- ``` -->
+
+
+
+
+
+
+Function `sjlabelled::label_to_colnames` convert variable label to variable name. However, the variable labels for GUI data are too long. 
+
+
+We need to create custom labels for subsets of variables. The variable labels are updated  using `Hmisc::upData` function.
+
+```{r}
+
+
+var.labels <- c(cq3g2a = "high_inc",
+               cq3g2b = "training_opp",
+               cq3g2c = "interesting_job",
+               cq3g2d = "flex_hours",
+               cq3g2e = "time_off",
+               cq3g2f = "good_for_career",
+               cq3g2g = "being_boss",
+               cq3g2h = "help_society",
+               cq3g2i = "job_security",
+               cq3g2j = "travel_abroad",
+               cq3g2k = "other"
+ )
+
+
+df <- Hmisc::upData(df,labels = var.labels)
+
+# df %>% sapply(attr, which = "label")
+
+df <- sjlabelled::label_to_colnames(df)  # uses sjlabelled
+
+```
+
+
+
+<!-- ```{r} -->
+<!-- # # library(RecordLinkage) -->
+<!-- # library(stringdist) -->
+<!-- # d <- stringdistmatrix(df_names$name, df_names$name) -->
+<!-- # # library(superheat) -->
+<!-- # # superheat(d) -->
+<!-- # heatmap(d) -->
+<!-- #  -->
+<!-- # h <- hclust(d) -->
+<!-- ``` -->
+
+
+<!-- https://stackoverflow.com/questions/11535625/similarity-scores-based-on-string-comparison-in-r-edit-distance -->
+<!-- distance of the names -->
+
+
+## Data wrangling using tidyverse
+
+
+
+Data from large surveys can introduce unique issues in data wrangling. Tidyverse principles when dealing with factor variables produce simpler and less fragile code than base R \citep{McNamara2018}.
+
+We show some examples below:
+
+`forcats::fct_explicit_na`  Use to recode all the missing values as "not selected" in a choose all that apply question.
+
+```{r}
+wave_3 <- wave_3 %>%  
+  mutate(across(starts_with("cq3g2"), ~fct_explicit_na(.x, "No")))
+
+```
+
+
+Use `fct_recode` to remove "Don't Know" and "Refusal" responses.
+```{r}
+# wave_3 %>% 
+#   select(starts_with("cq3g2")) %>%
+#   sapply(levels)
+wave_3 <- wave_3 %>% 
+  mutate(across(starts_with("cq3g2"), ~ fct_recode(.x, NULL = "Don't Know",NULL = "Refusal")))
+# wave_3 %>% 
+#   select(starts_with("cq3g2")) %>%
+#   sapply(levels)
+
+```
+
+An example of using `forcats::fct_collapse` and `dplyr::case_when` to create type of school variable from principal questionnaire variables on the number of girls and number of boys in the school. 
+
+```{r}
+
+
+
+wave_3 %>% mutate(p3q4b = fct_collapse(p3q4b, no = "0", other_level = "yes")) -> wave_3
+wave_3 %>% mutate(p3q4a = fct_collapse(p3q4a, no = "0", other_level = "yes")) -> wave_3
+
+wave_3 <- wave_3 %>% mutate(school_type = case_when(
+   p3q4b == "yes" & p3q4a == "yes" ~ "mixed",
+   p3q4b == "yes" | p3q4a == "yes" ~ "single"))
+
+
+```
+
+
+Convert to numeric
+
+```{r}
+
+wave_3_dict%>% filter(str_detect(variable, "cq3g4a"))
+
+wave_3  <- wave_3  %>% mutate(across(starts_with("cq3g4"), ~ fct_recode(.x, `1` = "not important at all", `6` = "very important",  NULL = "Don't Know",NULL = "Refusal"))) %>% mutate(across(starts_with("cq3g4"), ~ as.numeric(.x)))
+
+
+```
+
+
+
+<!-- # wave_3 %>%  -->
+<!-- #   select(starts_with("cq3g4")) %>%  -->
+<!-- #   correlation(include_factors = T)  -->
+
+<!-- # pcor <- wave_3 %>%  -->
+<!-- #   # select(starts_with("cq3g4")) %>%  -->
+<!-- #   correlation(include_factors = T)  -->
+<!-- # pcor[,1:3] %>%  -->
+<!-- # pcor %>%  select(Parameter1:r) -->
+<!-- #  -->
+<!-- # wave_3 %>% select(starts_with("cq3g4")) %>% cor(use = "pairwise.complete.obs")  -->
+<!-- # Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) :  -->
+<!--   # contrasts can be applied only to factors with 2 or more levels -->
+
+
+## Join data from different waves
+
+
+Growing Up in Ireland is a longitudinal study based on a fixed panel
+design. This means that the project follows the children and their families who were recruited into the study at 9 years of age for re-interview on several subsequent occasions. 
+
+
+
+Variable Region: Urban or Rural refers to the location of the household and has been derived from the Primary Caregivers Questionnaire (Wave 1)- This variable is only available in Wave 1
+
+Merge wave 3 and wave 1 by left join
+
+
+```{r}
+wave_1 <- haven::read_spss(here("ReproducibleGUI","BD_Paper","data", "raw", "XGUI_Data_9YearCohort_Wave1.sav"),  
+                              user_na = TRUE) 
+
+wave_2 <- haven::read_spss(here("ReproducibleGUI","BD_Paper","data", "raw", "XGUI_Data_13YearCohort_Wave2.sav"),  
+                              user_na = TRUE) 
+
+
+length(unique(wave_1$zid01))==nrow(wave_1)
+length(unique(wave_2$zid01))==nrow(wave_2)
+length(unique(wave_3$ID))==nrow(wave_3)
+
+w3_sub <- merge(wave_3,wave_1 %>%
+  select(zid01,adsd60),by.x = "ID", by.y = "zid01", all.x=TRUE)
+
+
+
+```
+
+
+
+
+
+
+
+
+## Visualise
+
+```{r}
+wave_3 %>% select(starts_with("w3cq")) %>% cor(use = "pairwise.complete.obs") %>% corrplot::corrplot(order = 'AOE', sig.level = 0.05, tl.cex = 0.4,tl.col = "black")
+```
+
+Packages for visualising data
+Figure \ref{fig:missing}.
+
+```{r, missing, echo=FALSE, fig.cap='Missing values in wave 3 principals questionnaire.', out.width='4in', fig.align='center', fig.pos='htbp'}
+# knitr::include_graphics('Rlogo.pdf')
+
+naniar :: vis_miss(wave_3 %>% select(starts_with("p3q")), warn_large_data = FALSE)+theme(axis.text.x = element_text(size = 3, angle = 90))
+
+
+# naniar :: vis_miss(wave_3 %>% select(starts_with("pc")), warn_large_data = FALSE)
+```
+
+```{r results='asis'}
+d <- Hmisc::describe(wave_3 %>% select(starts_with("p1"), starts_with("p4")))
+
+d <- Hmisc::describe(wave_3 %>% select(starts_with("p1"), starts_with("p4"), starts_with("w3cq")))
+# where(is.numeric)
+# d
+```
+
+```{r}
+plot(d, which= "both")
+```
+
+
+
+```{r results='asis'}
+# dataReporter::makeDataReport(df, replace=TRUE)
+# DataExplorer::create_report(df)
+```
+
+
+<!-- ADD SOMETHING ABOUT SURVEY WEIGHTS? -->
+
+
+## Using Sampling Weights in Survey Data
+
+Sampling weights are used in Complex Survey Designs to take into account the unequal sample selection probabilities. They also provide corrections for any biases that could occur in the sample due to non- responses and sampling errors. 
+The Sample design plays an important role in analysing Complex Surveys. Analysing Complex Samples ignoring the sample design may yield biased parameter estimates and under estimate the standard errors which may lead to high estimates for tests of significance which may cause Type I errors. Failing to reject null hypothesis, may give indications of false association between the variables when variables are independent of each other.
+
+The weighting variables used in the dataset are:
++ Weighting Factor (Wgt_9yr)
++ Grossing Factor (Gross_9yr)
+
+The Weighting factor is used to adjust for the proportion of the population represented by the sample and the Grossing factor is used for describing the population.Both Weighting factor and grossing factor give the same structural (percentage) breakdown of the target population, the weighting factor weights to the total sample size and the grossing factor grosses to the total population size.
+
+The svydesign function from the “survey” package written by Thomas Lumley \citep{@lumley2020package} stores the information about the design of survey as an object which can be used  for further analysis without defining weights again.
+
+```{r}library(tidyverse)
+library(ggplot2)
+library(survey)
+library(haven)
+library(here)
+library(cowplot)
+
+#Reading dataset Convention B
+wave1.data <- readRDS(here("ReproducibleGUI","BD_Paper","data", "RdsFiles", "Wave1_GUI_9yr.RDS")) 
+
+#adwg02 - Grossing factor 9 year old and     adwg01- weighting factor 9-year old
+
+#View(wave1.data)
+
+#Looking at the population numbers
+summarize(wave1.data, N_Pop = sum(adwg02))    # Gross_9yr or adwg02  represents the population weights
+
+# Looking at the sample numbers
+summarize(wave1.data, N_Sam = sum(adwg01))   # Wgt_9yr  or adwg01 represents the sample weights to match population distribution 
+
+#survey design using grossweights
+wave1_gdesign <- svydesign(id = ~zid01, data = wave1.data, 
+                           weights = ~adwg02)    
+
+
+#azid06 is the shortname for partner in household
+
+#partner in household using gross weights in sample
+par_1_pop <- svytable(~azid06, design = wave1_gdesign) %>%
+   as.data.frame() %>%
+   mutate(Percentage = (Freq/sum(Freq))*100) %>%
+   arrange(desc(Percentage))
+
+par_1_pop
+
+# Plot the partner is household
+p1 <-ggplot(data = par_1_pop, mapping = aes(x = azid06, y = Percentage)) + 
+  geom_col() + xlab("Resident partner in household")+
+  scale_x_discrete(limits = par_1_pop$azid06)+ylim(0,100) + ggtitle("Gross weighted Sample")
+
+
+## partner in household without using  weights
+without_wt <- wave1.data %>%
+   group_by(azid06) %>%
+   summarize(Freq = n()) %>%
+   mutate(Percentage = (Freq/sum(Freq))*100) %>%
+   arrange(desc(Percentage))
+
+without_wt
+
+p2 <- ggplot(data = without_wt, mapping = aes(x = factor(azid06), y = Percentage)) + 
+  geom_col() +  xlab("Resident partner in household")+
+  scale_x_discrete(limits = factor(without_wt$azid06))+  ylim(0,100) +
+  ggtitle("Un-weighted Sample")# Labels layer omitted
+
+plot_grid(p1, p2)
+
+
+```
+
+### Using Weights in ggplot
+
+The ggplot2 package offers multiple options for creating and customizing weighted scatter plots. Weighted scatterplots can be constructed by adding the size argument to ggplot(aes()). These plots are often called "bubble plots". Higher size of the bubbles represents higher weights. And the opacity of the bubble represents less individuals with the particular combination of x and y values. Weights can also be constructed by adding the alpha value inside the ggplot(aes())
+
+
+<!-- ```{r warning = FALSE, message = FALSE, fig.align = 'center'} -->
+
+<!-- # Primary caregiver's height -apph14 -->
+<!-- # Primary caregiver's weight - apph15 -->
+<!-- # If Primary Caregiver consumes alcohol - appr03 -->
+
+<!-- df <- wave1.data %>% -->
+<!--   select(apph14,apph15,adwg02,appr03) -->
+
+<!-- df <- df[complete.cases(df),] -->
+
+<!-- # Representing primary caregivers height vs weight -->
+<!-- ggplot(data = df, mapping = aes(x = apph15, y = apph14)) +  -->
+<!--   geom_point()+ xlab("Primary caregiver's height ") + ylab("Primary caregiver's weight") -->
+
+<!-- # Representing primary caregivers height vs weight and coloring by their smoking status -->
+<!-- ggplot(data = df, mapping = aes(x = apph15, y = apph14, colour = factor(appr03))) +  -->
+<!--   geom_point()+ xlab("Primary caregiver's height ") + ylab("Primary caregiver's weight") -->
+
+
+<!-- #Looking at the smoking status. -->
+<!-- haven::as_factor(df$appr03)%>% levels() -->
+<!-- df$appr03 <- haven::as_factor(df$appr03) -->
+
+
+<!-- # Use jittering to prevent overlapping of points -->
+<!-- ggplot(data = df, mapping = aes(x = apph15, y = apph14, color = appr03)) +  -->
+<!--   geom_jitter(width = 0.2, height = 0)+ xlab("Primary caregiver's height ") + ylab("Primary caregiver's weight") -->
+
+
+<!-- # Weights using bubble plots, here weights are represented as size -->
+<!-- ggplot(data = df, mapping = aes(x = apph15, y = apph14, -->
+<!--                                     size = adwg02)) +  -->
+<!--   geom_jitter(width = 0.1, height = 0, alpha= 0.3) +  -->
+<!--   guides(size = FALSE)+ xlab("Primary caregiver's height ") + ylab("Primary caregiver's weight") -->
+
+<!-- # Bubble plot for PC's weight vs height, colouring by smoking status -->
+<!-- ggplot(data = df, mapping = aes(x = apph15, y = apph14, -->
+<!--                                     size = adwg02, color = appr03)) +  -->
+<!--   geom_jitter(width = 0.2, height = 0, alpha= 0.2) +  -->
+<!--   guides(size = FALSE)+ xlab("Primary caregiver's height ") + ylab("Primary caregiver's weight")+   geom_smooth(method = "lm", se = FALSE, mapping = aes(weight = adwg02)) -->
+
+
+<!-- # Weights is supplied as alpha -->
+<!-- ggplot(data = df, mapping = aes(x = apph15, y = apph14,                                     alpha = adwg02)) +  geom_point() +  -->
+<!--   guides(scale = "none")+ xlab("Primary caregiver's height ") + ylab("Primary caregiver's weight") + theme(legend.position = "none") -->
+
+
+<!-- ``` -->
+
