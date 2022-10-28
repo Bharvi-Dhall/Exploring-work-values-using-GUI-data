@@ -1,0 +1,177 @@
+---
+title: "Object set up"
+author: "Bharvi Dhall"
+date: "`r Sys.Date()`"
+output:
+  rmarkdown::html_vignette:
+     toc: true
+     pdf_document: default
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# "Code to read in spss data files from Wave 1, 2  and 3"
+# save as rds datasets
+
+This file reads the GUI and time use datasets from the three waves and creates R objects for them. The resulted R objects are saved in the Data folder.
+
+
+# Set file path
+
+```{r}
+library(here)
+here()
+  
+```
+
+# Loading libraries
+
+```{r}
+# loading libraries
+
+library(tidyverse)
+library(haven)
+
+```
+
+
+# Reading dataset for  Wave 1 Convention B
+
+```{r}
+# Read the dataset into R
+wave1_gui <- haven::read_spss("Data/Raw_GUI_Data/XGUI_Data_9YearCohort_Wave1.sav",  
+                                               user_na = TRUE, 
+                                               col_select = NULL,
+                                               skip = 0,
+                                               n_max = Inf,
+                                               .name_repair = "unique")  #Convention 
+
+#user_na If TRUE variables with user defined missing will be read into labelled_spss()objects. If FALSE, the default, user-defined missings will be converted to NA
+
+head(wave1_9year_gui)
+
+dim(wave1_9year_gui)
+#[1] 8568  850
+sum(is.na(wave1_9year_gui))
+#1692669
+
+
+
+dim(wave1_gui)
+# [1] 8568  850
+
+
+
+# Time use data
+wave1_timeuse <- haven::read_spss("Data/Raw_GUI_Data/GUI_Data_9YearCohort_Wave1_TimeUse.sav",
+                             user_na = TRUE,
+                             col_select = NULL,
+                             skip = 0,
+                             n_max = Inf,
+                             .name_repair = "unique")
+
+
+
+dim(wave1_timeuse)
+#[1] 6228  501
+
+```
+
+# Reading dataset for Wave 2
+
+```{r}
+
+
+# Wave 2 data set
+wave2_gui <- haven::read_spss("Data/Raw_GUI_Data/XGUI_Data_13YearCohort_Wave2.sav",
+                             user_na = TRUE,
+                             col_select = NULL,
+                             skip = 0,
+                             n_max = Inf,
+                             .name_repair = "unique")
+
+
+
+
+
+str(wave2_gui)
+
+dim(wave2_gui)
+#[1] 7525  913
+
+# Wave 2 time use data
+wave2_timeuse  <- haven::read_spss("Data/Raw_GUI_Data/GUI_Data_13YearCohort_Wave2_TimeUse.sav",
+                             user_na = TRUE, 
+                             col_select = NULL,
+                             skip = 0,
+                             n_max = Inf,
+                             .name_repair = "unique")
+
+
+
+dim(wave2_timeuse)
+#[1] 5023  302
+
+```
+
+
+# Reading dataset for Wave 3
+
+```{r}
+# Wave 3 data set
+wave3_gui_1 <- haven::read_spss("Data/Raw_GUI_Data/GUI_Data_17YearCohort_Wave3_ TimeUse.sav",
+                             user_na = TRUE,
+                             col_select = NULL,
+                             skip = 0,
+                             n_max = Inf,
+                             .name_repair = "unique")
+
+wave3_gui_2 <- haven::read_spss("Data/Raw_GUI_Data/XGUI_Data_17YearCohort_Wave3.sav",
+                             user_na = TRUE,
+                             col_select = NULL,
+                             skip = 0,
+                             n_max = Inf,
+                             .name_repair = "unique")
+
+
+
+```
+
+
+```{r}
+# Saving all the four datasets as R objects
+
+dim(wave3_gui_1)
+#[1] 3622  515
+
+dim(wave3_gui_2)
+#[1] 6216 1222
+
+# Saving wave1_gui as .Rdata
+saveRDS( wave1_gui, "Data/RObjects_created_using_GUI/Wave1_GUI_9yr.RDS" )
+
+# Saving wave2_gui as .Rdata
+saveRDS( wave2_gui, "Data/RObjects_created_using_GUI/Wave2_GUI_13yr.RDS" )
+
+# Saving wave1_timeuse as .Rdata
+saveRDS( wave1_timeuse, "Data/RObjects_created_using_GUI/Wave1_TU_9yr.RDS" )
+
+# Saving wave1_timeuse as .Rdata
+saveRDS( wave1_timeuse, "Data/RObjects_created_using_GUI/Wave2_TU_13yr.RDS" )
+
+
+# Saving wave3_gui_1 as .Rdata
+saveRDS( wave3_gui_1, "Data/RObjects_created_using_GUI/Wave3_TU_17yr.RDS" )
+
+# Saving wave3_gui_2 as .Rdata
+saveRDS( wave3_gui_2, "Data/RObjects_created_using_GUI/Wave3_GUI_17yr.RDS" )
+
+#ab <- readRDS("../RObjects_created_using_GUI/Wave3_GUI_1r.RDS")
+#head(ab)
+```
+
+
+
