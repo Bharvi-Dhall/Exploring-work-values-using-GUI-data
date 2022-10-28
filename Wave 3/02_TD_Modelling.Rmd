@@ -1,0 +1,655 @@
+---
+title: "02_TD_Modelling"
+author: "Bharvi Dhall"
+date: "`r Sys.Date()`"
+output: html_document
+---
+Note- Run 00a_TD, 00b_TD, 01_TD before running this file
+Install package performance to complete kniting file.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width=10, fig.height=5, dpi = 300, fig.path = "Plots/", warning = FALSE)
+```
+
+
+This file contains the heatmap and coefficient plot for the career choice data.
+
+## Introduction
+In this analysis we are investigating the factors which drive work values of 17-18-olds in the GUI study. Logistic regression has been used to find the variables that are associatxed with the work values and from previous main effect models gender has been found to be an important predictor which has strong association with the workvalues. <br>
+
+<p> We are trying to access if interactions of the predictors with gender are significant and if they affect the work values. </p>
+
+### Data
+This analysis uses data from wave3 and some missing information has been extracted from wave 2.
+ 
+ <Strong> Data Dictionary </Strong>
+Table 1: The table contains description of variables
+
+| Variable | Description |Derived   |
+|--------------|----------------------------|
+| p2sexW3   | Person 2 gender Wave 3 Grid (Young Person)|                        |
+| pc3f1educ | Primary Caregiver's Education                      |
+| p1empW3  | Primary Caregiver's Employment Type                        |
+| w3equivinc | Equivalised Income                       |
+| cq3g4f    | How important - Profession and work                        |
+| cq3g4j  | How important - Art and culture                       |
+| cq3g4h  | How important - One's own family and children                       |
+| CognitiveNamingTotal  |                         |
+| CognitiveMathsTotal  |                       |
+| CognitiveVocabularyTotal  |                        |
+| cq3b4a  | Did you take Transition Year                        |
+| w3cq_conscientious  |                         |
+| cq3a3ayr  |    Has left school or not                    |
+| imp_school_type  |     School Type                     |  Derived
+| guidance  |       Has taken any form of Career Guidance       Derived           
+| hopa  |    Parental Interaction                     | Derived
+
+
+
+Table 2: The table contains description of work values
+
+
+| Name         | Value |   
+|--------------|----------------------------|
+| cq3g2a | a high income |
+| cq3g2b | offered good training opportunities |
+| cq3g2c | an interesting job |
+| cq3g2d | flexible working hours |
+| cq3g2e | generous holidays/time off |
+| cq3g2f | a good step on the career ladder |
+| cq3g2g | be your own boss |
+| cq3g2h | a job that is useful to society or helps other people|
+| cq3g2i | job security |
+| cq3g2j | opportunity to travel/work abroad |
+
+
+
+
+## Loading Library
+
+```{r loading_libraries}
+
+library(tidyverse)
+library(ggplot2)
+library(here)
+library(sjlabelled) 
+library(Hmisc) #for assigning labels
+library(manyModelViz) # for creating heatmap plots
+library(GGally) #for visualizing multiple models
+library(tidymodels) # for creating generic model formulas
+library(ggeffects)
+library(performance) # for R-squared
+library(pROC)#for ROC curve
+library(scales)
+```
+
+# Read in the tidy dataset
+
+```{r Reading_Dataset}
+
+here::i_am("CATAv2/02_TD_Modelling.Rmd")
+df <- readRDS(here("CATAv2","R_ob","Cata_W3_sub_tidy.RDS" ))
+
+dim(df)
+# [1] 6216   31The 
+#View(df)
+#names(df)
+
+
+
+
+```
+
+# Assigning Labels to short names
+
+```{r Assigning_labels }
+
+# Loading named vector
+source(here("CATAv2/Varnames.R"))
+
+# Creating a named vector
+data <- Hmisc::upData(df,labels = var.labels)
+
+#View(data)
+
+attributes(data$cq3g2a)
+
+# changing labels to column names
+names(data) <- colnames(label_to_colnames(data))  # uses sjlabelled
+
+
+
+#Removing 3 work related variables
+data$part_time_job <- NULL
+data$work_for_business <- NULL
+data$work_exp <- NULL
+data$household_region <- NULL
+
+
+
+# Looking the names
+names(data)
+```
+
+## Fit logistic regression with main effects
+
+We are fitting Logistic regression using all predictors, and then using car::Anova to find the effect of each predictor on the response variable (Is there any significant association between the drivers and workvalues?)
+
+
+```{r Main_effects}
+# Making a vector for response variables
+y <- data[,2:11] # omit other
+names(y)
+
+#get rid of IDs and create a dataframe for predictors
+x <- data[,-c(2:12,which(names(data)=="ID"), which(names(data)== "schoolID"))]
+names(x)
+```
+
+
+Rescaling all the numerical variables between 0 and 1
+
+```{r}
+sapply(x, class)
+num_vars <- names(which(sapply(x, is.numeric)))
+
+x$equalised_inc <- as.numeric(x$equalised_inc)
+x$work_imp <- as.numeric(x$work_imp)
+x$religion_imp <- as.numeric(x$religion_imp)
+x$own_family_imp <- as.numeric(x$own_family_imp)
+x$conscientious_score <- as.numeric(x$conscientious_score)
+x$cognitive_scores <- as.numeric(x$cognitive_scores)
+x$parental_interactions <- as.numeric(x$parental_interactions)
+x$career_guidance <- as.numeric(x$career_guidance)
+
+summary(x[,num_vars])
+x[,num_vars] <- lapply(x[,num_vars],function(x) rescale(x,c(0,1)))
+summary(x[,num_vars])
+
+```
+
+
+```{r Main_effects2}
+# Fitting logistic regression on main effects
+fits <- map(y, ~ glm(.x ~ . ,family="binomial",data=x))
+f <- purrr::map_dfr(fits, ~ broom::tidy(car::Anova(.x)), .id="response")
+f1 <- dplyr::filter(f, term != "Residuals")
+
+# make heatmap
+cols <- c("blue", "cyan", "grey95")
+modelHeatmap(f1, "term", "response", "p.value", xorder="increasing", yorder="increasing")+
+  ggplot2::scale_fill_manual(values = cols)+ ggplot2::xlab("Variables driving Work-Values") + ggplot2::ylab("Work-Values") + ggplot2::ggtitle("Heatmap of 10 Logistic Regression fits of the Work-Values")
+
+# TY  coming significant in main effects
+```
+
+
+
+## Fit the logistic regressions and check for interactions with gender and fit model with main effects and significant interactions.
+
+```{r gender_in_model}
+fits.2 <- map(y, ~ glm(.x ~ (.-gender)*gender ,family="binomial",data=x))
+
+
+d <- purrr::map_dfr(fits.2, ~ broom::tidy(car::Anova(.x)), .id="response")
+d1 <- dplyr::filter(d, term != "Residuals")
+#y <- "response"
+d1 <- d1[grep("gender:|:gender", d1$term),] # to check whether term has "gender:"
+d1$term <- sub("gender:|:gender", "",d1$term) # to replace "gender:" with "" for values of terms for all interactions
+
+cols <- c("blue", "cyan", "grey95")
+modelHeatmap(d1, "term", "response", "p.value", xorder="increasing", yorder="increasing")+
+  ggplot2::scale_fill_manual(values = cols)+ ggplot2::xlab("Variables driving Work-Values") + ggplot2::ylab("Work-Values") + ggplot2::ggtitle("Interactions with Gender")
+```
+
+The significant interactions with gender are: own_family_imp:gender, (highly) conscientious_score:gender,school_type:gender, (highly) work_importance:gender, career_guidance:gender, TY:gender (sig)
+
+
+```{r sig_gender_interaction}
+# to select significant interactions where p-value is less than 0.05
+sig_int_vars <- d1 %>% filter(p.value<=0.05) %>% select(term) %>% 
+  unique() %>% deframe()
+   
+
+## Ploting  significant interactions with gender
+fits_new <- map(y, ~ glm(.x ~ . + own_family_imp*gender+
+                           conscientious_score*gender+
+                           school_type*gender+
+                           work_imp*gender+
+                           career_guidance*gender+
+                           TY*gender ,
+                         family="binomial",data=x))
+d_new <- purrr::map_dfr(fits_new, ~ broom::tidy(car::Anova(.x)), .id="response")
+d1_new <- dplyr::filter(d_new, term != "Residuals")
+
+
+cols <- c("blue", "cyan", "grey95")
+p <- modelHeatmap(d1_new, "term", "response", "p.value", xorder="increasing", yorder="increasing")+
+  ggplot2::scale_fill_manual(values = cols)+ggplot2::xlab("Variables driving Work-Values") + ggplot2::ylab("Work-Values") + ggplot2::ggtitle("Significant Interactions with Gender")
+
+p
+```
+
+
+## Fit the logistic regressions and check for interactions with cognitive scores and fit model with main effects and significant interactions.
+
+```{r gender_in_model2}
+fits.2 <- map(y, ~ glm(.x ~ (.-cognitive_scores)*cognitive_scores ,family="binomial",data=x))
+
+
+d <- purrr::map_dfr(fits.2, ~ broom::tidy(car::Anova(.x)), .id="response")
+d1 <- dplyr::filter(d, term != "Residuals")
+#y <- "response"
+d1 <- d1[grep("cognitive_scores:|:cognitive_scores", d1$term),] # to check whether term has "gender:"
+d1$term <- sub("cognitive_scores:|:cognitive_scores", "",d1$term) # to replace "gender:" with "" for values of terms for all interactions
+
+cols <- c("blue", "cyan", "grey95")
+modelHeatmap(d1, "term", "response", "p.value", xorder="increasing", yorder="increasing")+
+  ggplot2::scale_fill_manual(values = cols)+ ggplot2::xlab("Variables driving Work-Values") + ggplot2::ylab("Work-Values") + ggplot2::ggtitle("Interactions with Cognitive Scores")
+```
+
+
+## Comparing models.
+
+
+Model 1: All main effects + highly sig gender interactions (p value  < 0.01)
+
+Model 2: All main effects + all interactions with gender
+
+Model 3: Main effects only
+
+```{r  model_compare}
+#fits.1 ---> Model 1
+#fits.2 ---> Model 2
+#fits ---> Model 3 )
+
+## comparing models 1 and 2
+
+models.1 <- map(y, ~ glm(.x ~ .-(TY + PC1_emp + PC1_edu + left_school)+
+                           own_family_imp*gender+
+                           conscientious_score*gender+
+                           school_type*gender,
+                         family="binomial",data=x))
+
+
+models.2 <-  map(y, ~ glm(.x ~ (.-gender)*gender ,family="binomial",data=x))
+
+#map2(models.1,models.2,stats::anova) %>% pull()
+
+pval_anova <- unlist(map2(models.1,models.2,function(.x,.y) anova(.x,.y,test="LR")[2,5]))
+
+LR_comparison_anova <- data.frame(response=names(pval_anova),pvalue=as.numeric(pval_anova))
+
+print(LR_comparison_anova)
+# model 1 is better than model2. High income
+# Model 1 better for training opp 
+# model 1 is better than model2. Interesting job
+# model 1 is better than model2. Flex_Hours
+# model 1 is better than model2. Time_off
+# model 1 is better than model2. being_boss
+# model 1 is better than model2. help society
+# model 1 is better than model2. job_security
+# model 1 is better than model2. travel_abroad
+
+
+
+## comparing models 1 and 3
+# dropping TY + PC1_emp + PC1_edu + left_school from main effects
+models.3 <-  map(y, ~ glm(.x ~ .-(TY + PC1_emp + PC1_edu + left_school) ,family="binomial",data=x))
+
+pval_anova2 <- unlist(map2(models.3,models.1,function(.x,.y) anova(.x,.y,test="LR")[2,5]))
+
+LR_comparison_anova2 <- data.frame(response=names(pval_anova2),pvalue=as.numeric(pval_anova2))
+LR_comparison_anova2
+# Model with interactions is better for interesting job, time off, job security and travel abroad. For all others simple model with only main effects is better
+
+```
+
+## Selecting interaction terms.
+Selecting highly significant interaction (only dark blue)
+```{r final_model}
+sig_int_vars2 <- d1 %>% filter(p.value<=0.01) %>% select(term) %>% unique() %>% deframe()
+
+# Getting rid of some predictors
+x1 <- x %>%
+  dplyr::select(-c("TY",  "PC1_emp" , "PC1_edu", "left_school"))
+
+
+
+# Refit model
+fits.1 <- map(y, ~ glm(.x ~ . +own_family_imp*gender+
+                           conscientious_score*gender+
+                           school_type*gender ,
+                       family="binomial",data=x1))
+
+
+
+d_new <- purrr::map_dfr(fits.1, ~ broom::tidy(car::Anova(.x)), .id="response")
+d1_new <- dplyr::filter(d_new, term != "Residuals")
+
+cols <- c("blue", "cyan", "grey95")
+final.plot <- modelHeatmap(d1_new, "term", "response", "p.value", xorder="increasing", yorder="increasing")+
+  ggplot2::scale_fill_manual(values = cols)+ggplot2::xlab("Variables driving Work-Values") + ggplot2::ylab("Work-Values") + ggplot2::ggtitle("Significant Interactions with Gender")
+
+final.plot
+########################################################
+# plot the interactions and their main effects together
+reorder_pred <- c("cognitive_scores","gender","work_imp","own_family_imp","gender:own_family_imp","conscientious_score","gender:conscientious_score","equalised_inc","career_guidance","religion_imp","household_region","school_type","gender:school_type","parental_interactions")
+
+
+
+plot1 <- modelHeatmap(d1_new, "term", "response", "p.value", xorder=reorder_pred, yorder="increasing") +
+  ggplot2::scale_fill_manual(values = cols) +
+  ggplot2::xlab("Variables driving Work-Values") +
+  ggplot2::ylab("Work-Values") +
+  ggplot2::ggtitle("Final Model revealing potential Work Value Drivers")
+
+plot1
+
+
+```
+
+## Checking for three way interactions between gender, school type and career guidance 
+
+```{r three_way_int}
+
+# Refit model
+fits.3 <- map(y, ~ glm(.x ~ . +own_family_imp*gender+
+                           conscientious_score*gender+
+                           school_type*gender+
+                         gender*school_type*career_guidance,
+                       family="binomial",data=x1))
+
+
+
+d3 <- purrr::map_dfr(fits.3, ~ broom::tidy(car::Anova(.x)), .id="response")
+d3_int <- dplyr::filter(d3, term != "Residuals")
+
+cols <- c("blue", "cyan", "grey95")
+modelHeatmap(d3_int, "term", "response", "p.value", xorder="increasing", yorder="increasing")+
+  ggplot2::scale_fill_manual(values = cols)+ggplot2::xlab("Variables driving Work-Values") + ggplot2::ylab("Work-Values") 
+
+# the three way interaction between gender, school type and career guidance  not coming out significant
+
+```
+
+
+Looking at model fit
+
+```{r model_fit}
+#Extract all AIC values
+ordered_response <- c("help_society", 
+                      "flex_hours", 
+                      "job_security",
+                      "time_off",
+                      "high_inc",
+                      "travel_abroad",
+                      "being_boss",
+                      "training_opp",
+                      "interesting_job",
+                      "good_for_career"
+                      )
+val <- vector(mode = "numeric",length = length(ordered_response))
+for(i in 1:length(ordered_response)){
+  val[i] <- fits.1[[ordered_response[i]]][["aic"]]
+}
+score <- data.frame(work_val = ordered_response, AIC = val)
+
+score$work_val <- fct_inorder(score$work_val) %>% fct_rev()
+
+#plot AIC values
+score %>%
+  ggplot(aes(x=AIC,y=work_val)) +
+  geom_point(size = 3, colour = "black") + 
+  geom_segment(aes(x=0,xend = AIC,y=work_val,yend=work_val ), size = 1.2)
+               
+               
+# to get R squared
+
+val <- vector(mode = "numeric",length = length(ordered_response))
+for(i in 1:length(ordered_response)){
+  val[i] <- r2_mcfadden(fits.1[[i]])[[1]]
+}
+score <- data.frame(work_val = ordered_response, mcfadden_r2 = val)
+
+score$work_val <- fct_inorder(score$work_val) %>% fct_rev()
+
+#plot AIC values
+score %>%
+  ggplot(aes(x=mcfadden_r2,y=work_val)) +
+  geom_point(size = 3, colour = "black") + 
+  geom_segment(aes(x=0,xend = mcfadden_r2,y=work_val,yend=work_val ), size = 1.2)
+               
+# ROC curves
+
+roc_list <- list()
+
+for(i in 1:length(fits.1)){
+  predicted <- predict(fits.1[[i]],x1,type="response")
+  roc_list[[i]] <- roc(as.vector(y[,i]),predicted)
+}
+
+
+names(roc_list ) <- names(fits.1)
+
+ggroc(roc_list)
+```
+## Final model and Its Interpretation
+
+Final model: All main effects + highly sig gender interactions (p value  < 0.01)
+
+
+Significant Interactions
+1. own_family_imp*gender
+2. conscientious_score*gender
+3. cog_vocab*gender
+4. school_type*gender
+
+Question of Interest
+Is it gender that is driving this difference, or is gender correlated to a more immediate predictor of work values?
+
+
+
+```{r finl_model_coeff ,fig.width=14, fig.height=8}
+#Model
+#fits.1
+
+
+
+#Heatmap
+final.plot
+
+
+
+#coefficients plot of main effects which donot have interactions
+include_vars <- base::setdiff(names(x1),c("own_family_imp","gender","conscientious_score","school_type"))
+```
+
+
+
+<<<<<<< HEAD
+```{r finl_model_coeff2 ,fig.width=14, fig.height=8}
+
+
+#plotting high income
+ggcoef_model(fits.1$training_opp,include = include_vars, shape_values= c(19,1), point_stroke=.5, errorbar_coloured=F, point_size=3 )+ ggtitle("Main effects for Training Opportunity")
+
+
+    
+#Looking at the effects of variables
+```
+
+The key drivers of work values are gender, cognitive scores (vocab and maths), how important is work/family for a 17-18 year old. Career guidance impacts helping society and travel abroad positively.  
+
++ High Income
+
+Gender being female and higher cognitive vocabulary and naming scores are negatively associated with high income. Career guidance is not significant predictor but has a negative impact. Individuals with high cog maths scores are likely to pick high income.
+
+
++ Training Opportunity
+Lesser females go for training opportunities. Parental interactions and conscientious score are found to have positive association. Cognitive scores of maths and vocab are negatively associated. Family income shows negative association
+
+
+```{r plot1}
+
+# ggpredict() - Adjusted Predictions at the Means (using reference levels to fix factors) - looks at marginal effect of predictor holding others constant.
+library(ggpredict)
+
+g1 <- ggpredict(fits.1$job_security, c("own_family_imp", "gender"))
+
+plot(g33) + 
+  geom_line(aes(linetype=group), 
+            position=position_dodge(width=.25))
+
+#For logistic regression models, since ggeffects returns marginal effects on the response scale, the predicted values are predicted probabilities.
+
+```
+
++ Interesting Job
+Females are more likely to look for interesting jobs compared to males . Cognitive vocab seems to have a positive association. Other than individuals who think work is important are less likely to pick int_job.
+Career guidance has a weak positive association
+
+Conscientious score is negatively associated but conscienctious and gender have a positive association.
+
+Females who think family is more important are less likely to pick interesting jobs compared to males.
+
++ Flexible hours
+
+ Cog maths and vocab score as well as conscientious score are important drives for this work value, but they have a negative association. Individuals who consider work is imp donot pick flex hours
+
++ Time off
+ Importance of valuing culture makes an individual look for good holidays in their career and those who consider work as important are less likely to look for time offs.
+Females with higher vocab donot prefer time off. Individuals with high conscientious scores are less likely to pick timeoff.
+
+```{r plot3}
+
+g3 <- ggpredict(fits.1$time_off, c("gender", "cognitive_scores"))
+
+
+
+plot(g3) + 
+  geom_line(aes(linetype=group), 
+            position=position_dodge(width=.25))
+```
+
++ Being own boss
+ Individuals who consider work as important and have high family incomes choose being own boss more often. Students with high cog vocab and maths score are less interested in this work value. Females are less likely to pick entrepreneurial jobs. Career guidance influences this work value negatively.
+ 
+ + Help Society
+Gender has very strong association. More females prefer helping society over males. Students with higher academic scores want to enroll in a job that helps society. Strong family and cultural beliefs drives this work value. Career Guidance and Parental interactions also have a positive influence.
+
++ Travel Abroad
+Girls are more likely to look for jobs that give them travelling opportunities. The individuals expecting their job to offer them travel opportunities. consider culture, family and work to be less important for them. Career guidance has a positive significant association 
+Conscientious score and gender have negative association.
+
+```{r plot4}
+
+g4 <- ggpredict(fits.1$travel_abroad, c("gender", "conscientious_score"))
+
+
+
+plot(g4) + 
+  geom_line(aes(linetype=group), 
+            position=position_dodge(width=.25))
+
+```
+
++ Job Security
+More males prefer this. Students in single sex school are more likely to pick job security. Males who consider having own family as important pick job security more compared to females.
+
+```{r plot5}
+
+g5 <- ggpredict(fits.1$job_security, c("school_type", "gender"))
+
+
+plot(g5) 
+
+
+```
+
+
+
+```{r plot6}
+
+g6 <- ggpredict(fits.1$high_inc,  "parental_interactions")
+
+
+plot(g6) + 
+  geom_line(aes(linetype=group), 
+            position=position_dodge(width=.25))
+
+```
+
+Key Takeaways
+-- Females are more likely to pick Interesting Job, Helping Society and travelling abroad. All other work values have been preferred by males instead of females.Career choices picked by girls fall under intrinsic and altruistic work values which are related to inner peace.The extrinsic work values have been dominated by males.
+- The work values preferred by girls have been negatively associated with cog vocab, naming and sometimes maths scores.
+- Individuals who give importance to family and culture are less likely to move abroad and prefer job security and time off.
+- Females are drawn to travelling abroad compared to males.
+- Conscientious score is an important predictor
+
+
+GGpredit
+ggpredict would calculate predicted outcome probabilities for a subgroup of the dataset. 
+It holds non-focal variables constant at their mean value (continuous) and reference level (factors).
+Condvis is better as we can see interactions at multiple values.
+
+
+
+# Refit model with xy together for condvis
+
+```{r condvis, eval=FALSE}
+
+#-------ch, just setting up model in slightly different syntax
+
+keepPreds <- form_pred(formula(fits_new[[1]]))  # extracting predictor names.
+keep_preds <- setdiff(keepPreds, c("TY",  "PC1_emp" , "PC1_edu", "left_school")) # getting rid of four variables showing least association
+
+fit_rhs <- paste0(c(keep_preds, "own_family_imp*gender","conscientious_score*gender","school_type*gender"), collapse="+")
+
+# to make y factors
+#for(i in 1:ncol(y))y[[i]] <- as.factor(y[[i]])
+
+
+
+xy <- cbind(x,y)
+xy$school_type <- as.factor(x$school_type) #making school type factor from character
+for (i in 1:ncol(xy)) labelled::var_label(xy[[i]])<- NULL 
+
+
+fits_cv <- map(names(y), ~ glm(as.formula(paste0(.x, "~", fit_rhs)), data=xy))
+
+##CH Condvis
+xy <- cbind(x,y)
+xy$school_type <- as.factor(xy$school_type) #making school type factor from character
+for (i in 1:ncol(xy)) labelled::var_label(xy[[i]])<- NULL 
+
+
+
+#make y factors?
+
+#-------- CH model explanations with condvis
+
+#names(y)
+
+library(condvis2)
+names(fits_cv) <- names(y)
+condvis(data=na.omit(xy), model=fits_cv[[3]], response=names(y)[3], sectionvars=c("gender", "cog_vocab"),
+        conditionvars= setdiff(keep_preds, c("gender", "conscientious_score")))
+
+# all models
+condvis(data=na.omit(xy), model=fits_cv[1:10], response=names(y)[1], sectionvars=c("gender"),
+        conditionvars= setdiff(keep_preds, c("gender"))) #  data for first resp
+
+
+
+
+
+
+```
+
+own_family and gender for interesting job,  gender and cog_vocab for high_income and gender and school type for job security.
+
+
+
+

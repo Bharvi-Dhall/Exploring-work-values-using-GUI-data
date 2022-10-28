@@ -1,0 +1,452 @@
+---
+title: "Data Wrangling"
+author: "Bharvi Dhall & Catherine Hurley"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width=5, fig.height=5, figs="figsBD/")
+```
+# Description
+This file used the CATA Wave3 subset data object and performs data wrangling on it.
+
+# Set file path
+
+```{r}
+library(here)
+here()
+  
+```
+
+# Loading Libraries
+
+```{r Loading_Libraries}
+library(tidyverse)
+library(ggplot2)
+library(forcats)
+library(naniar)
+library(sjlabelled)
+
+```
+
+
+
+# Read dataset 
+Subset of GUI data set.
+The columns are 11 career choices, other variables include gender, maths grades, parents education and expectation from parents
+
+# Identifiers
+ID- student ID
+schoolID - schoolID
+
+List of new variables
+#parent 1
+f14_were_you_born_in_ireland
+c3_how_far_do_you_expect_yp_will_go_in_education_or_training
+
+#parent 2
+e14_were_you_born_in_ireland
+b1_how_far_do_you_expect_yp_will_go_in_education_or_training
+
+#young person citizen of ireland
+k7a_are_you_a_citizen_of_ireland
+
+# How often parents ask about- HOPAA
+how_often_have_did_your_parent_asked_how_you_are_were_coping_with_the_amount_of_work_course_work_etc_for_your_courses
+
+how_often_have_did_your_parents_discussed_how_you_are_getting_on_with_different_subjects_at_school_college
+
+how_often_have_did_your_parent_discussed_your_plans_for_the_future
+
+how_often_have_did_your_parent_asked_how_you_are_were_getting_on_with_your_teachers_lecturers
+
+how_often_have_did_your_parent_discussed_how_you_did_in_tests_or_exams
+
+c13a_agree_or_not_i_dont_need_to_have_a_university_institute_of_technology_degree_to_get_the_kind_of_job_i_want_to_do
+
+b17a_in_this_final_school_year_have_had_any_grinds_or_private_tuition_in_any_of_school_subjects_excluding_special_educational_needs_support
+
+c3_what_do_you_think_you_are_most_likely_to_do_when_you_leave_school
+
+
+# school
+
+q5_describe_ethos_of_school
+
+q4a_number_of_boys
+
+q4b_number_of_girls
+
+school_type_w2 represents whether school is single sex or mixed
+
+
+## Read the data
+
+```{r Reading_data, fig.height= 8, fig.width=12, message= FALSE, warnings = FALSE}
+
+here::i_am("CATAv2/01_TD_DataWrangling.Rmd")
+data  <- readRDS(here("CATAv2","R_ob", "Cata_w3_imputed.RDS"))
+dim(data)
+# [1] 6216   43
+
+# Looking at the different variables present
+#names(data)
+#View(data)
+
+
+# Getting long names for the columns next to short names
+df_names <- data %>%sjlabelled::get_label() %>% enframe() %>% View()
+
+#To view the data dictionary
+#View(df_names)
+
+#df_names <- df_names %>% mutate(short_name = c("income","training","interesting" , "flex_hrs","time_off","career","boss","help_soc","security","travel","other","gender","sclass","m_ed","f_ed","level_jcmaths","level_lcmaths","grade_lcmaths" ,"cog_naming","cog_maths","cog_vocab","p1.irish","p2.irish","yp.irish","p1.expe
+Hi ct","p2.expect","subjects","work","teachers","future","exams", "degree_needed","post_school","suitable_accomodation" ,"boys", "girls","ethos","grinds" ))
+
+# Renaming variables with shorter names
+#names(data) <- df_names$short_name
+
+
+
+
+df <- droplevels(data)
+
+
+#View(data)
+```
+
+We are focusing on the question:
+Which choices would you consider while choosing a job?
+
+This question has 11 responses. Out of which 17 year olds have been asked to pick 3 that apply.
+
+Each response has been coded as a variable with levels Yes and NA. Yes when students pick it, NA when they don't.
+
+For the purpose of this analysis, all the NA's have been coded as No.
+
+```{r}
+df <- df %>%  mutate(across(starts_with("cq3g2"), ~as.numeric(.x)), across(starts_with("cq3g2"), ~replace_na(.x, 0)))
+
+```
+
+
+## looking at the NA values
+```{r out.width="100%", message= FALSE, warnings = FALSE}
+
+#total Na values
+sum(is.na(df))
+
+
+vis_miss(df[,-(1:11)])
+# High amount of missing (over 30%) for f_ed,p2.irish, p2.expect, degree (93%) and level_lcmaths (88.75%)
+
+
+```
+
+# Data Cleaning and Manipulation
+
+## Level of Education for Primary- pc3f1educ and Secondary Caregiver- sc3e1educ
+
+```{r}
+
+df %>% dplyr::level(pc3f1educ)
+
+
+
+#levels(df$pc3f1educ)
+
+df <- 
+  df %>% mutate(pc3f1educ = fct_recode(pc3f1educ, NULL = "Don't Know",
+                                       NULL ="Refusal",
+                                  Prim = "None/Primary school", 
+                                  JC = "Lower Secondary", 
+                                  LC = "Hi Sec/TechVoc/UppSec+Tech/Voc", 
+                                  No_degree = "Non Degree",
+                                  Deg = "Primary Degree",
+                                  Postgrad = "Postgrad"))
+  
+
+```
+
+## gender- p2sexW3
+```{r}
+df %>% dplyr::count(p2sexW3)
+```
+
+## Cognitive maths (cog_maths)- CognitiveMathsTotal
+```{r}
+
+df %>% count(CognitiveMathsTotal, sort = TRUE)
+
+df %>%
+   mutate(CognitiveMathsTotal = as.numeric(CognitiveMathsTotal)) -> df
+```
+
+## Cognitive Naming (cog_naming)- CognitiveNamingTotal
+```{r}
+
+df %>% count(CognitiveNamingTotal, sort = TRUE)
+
+df %>%
+   mutate(CognitiveNamingTotal = as.numeric(CognitiveNamingTotal)) -> df
+```
+
+## cog_vocab- CognitiveVocabularyTotal
+```{r}
+
+df %>% count(CognitiveVocabularyTotal, sort = TRUE)
+
+df %>%
+   mutate(CognitiveVocabularyTotal = as.numeric(CognitiveVocabularyTotal)) -> df
+```
+
+
+## Combine all the cognitive scores to create a new variable by averaging them
+
+```{r}
+
+df %>%
+  mutate(Cog_scores = rowMeans(dplyr::across(CognitiveNamingTotal:CognitiveVocabularyTotal))) -> df
+
+
+df$CognitiveMathsTotal <- NULL
+df$CognitiveNamingTotal <- NULL
+df$CognitiveVocabularyTotal <- NULL
+```
+
+## YP TIPI conscientious Subscale W3
+
+```{r}
+
+df %>% count(w3cq_conscientious)
+
+```
+
+## hopa work subjects future teachers exams
+
+
+```{r}
+
+df <- 
+  df %>% mutate(dplyr::across(cq3e1a:cq3e1f, ~ fct_recode(.x, "0" = "Don't Know",
+                                      "0" = "Refusal",
+                                    "1" = "Never or hardly ever",
+                                    "1" ="A few times a year",
+                                    "2" = "About once a month",
+                                    "3" = "Several times a month",
+                                    "4" = "Several times a week"))) %>%
+  mutate(dplyr::across(cq3e1a:cq3e1f, as.numeric)) %>%
+  mutate(hopa = rowMeans(dplyr::across(cq3e1a:cq3e1f))) %>%
+  select(-(cq3e1a:cq3e1f))
+
+
+
+```
+
+## In thinking about career did you attend talks and take guidance cq3c2a:cq3c2e
+
+```{r}
+
+df <-
+  df %>% mutate(dplyr::across(cq3c2a:cq3c2e, ~ fct_recode(.x, 
+                                    "0" = "No",
+                                    "1" = "Yes"))) %>%
+  mutate(dplyr::across(cq3c2a:cq3c2e, ~abs(as.numeric(.x)-2))) %>%
+  mutate(guidance = rowMeans(dplyr::across(cq3c2a:cq3c2e))) %>%
+  select(-(cq3c2a:cq3c2e))
+
+#View(df)
+#Values 0 to 1. 0- no support at all
+
+
+
+
+```
+
+## p1empW3 - PC employment status wave 3
+```{r}
+
+df %>% count(p1empW3)
+
+df <- 
+  df %>% mutate(p1empW3 = fct_recode(p1empW3,
+                                     Education = "At school/education",
+                                     Work= "Work or Education",
+                                    Unemployed = "Unemployed",
+                                    Home = "Home duties / retired",
+                                    Other = "Other"))
+
+```
+
+## w3equivinc - house income
+```{r}
+
+df %>% count(w3equivinc, sort = TRUE)
+
+df %>%
+   mutate(w3equivinc = as.numeric(w3equivinc)) -> df
+```
+## cq3g4f- How important are proffession and work
+
+```{r}
+
+ 
+df %>% count(cq3g4f)
+
+df %>%
+   mutate(cq3g4f = as.numeric(cq3g4f)) -> df
+
+```
+
+## Imp of family- cq3g4h
+
+```{r}
+
+df %>% count(cq3g4h)
+
+
+df %>%
+   mutate(cq3g4h = as.numeric(cq3g4h)) -> df
+
+
+```
+
+## cq3g4j - religion
+
+```{r}
+
+df %>% count(cq3g4j)
+
+
+df %>%
+   mutate(cq3g4j = as.numeric(cq3g4j)) -> df
+
+
+```
+
+## Did you take TY?
+
+```{r}
+df %>% count(cq3b4a)
+
+
+df <- 
+  df %>% mutate(cq3b4a = fct_recode(cq3b4a, NULL = "Don't Know",
+                                    NULL = "Refusal",
+                                    "Yes" = "Yes",
+                                     "No"= "No"))
+
+#levels(df$cq3b4a)
+#View(df)
+dim(df)
+#[1] 6216   25
+
+```
+
+## School_type
+```{r}
+df %>% count(imp_school_type)
+```
+
+## No of boys - p3q4a and No of girls- p3q4b
+We don't need these variables as we already have school type
+```{r}
+
+ #df %>% count(across(p3q4b:p3q4a)) %>% View()
+
+
+
+df$p3q4b <- NULL
+df$p3q4a <- NULL
+
+
+```
+
+## cq3a3ayr - when did the student left school? (can correspond to whether student left school or not)
+This is a categorical variable with four levels: "Prior to 2015", "2015-2016", "Don't Know" and "NA".
+NAs can be coded as "No" and other levels can be coded as "Yes".
+```{r}
+df %>% count(cq3a3ayr)
+
+df <- df %>% mutate(cq3a3ayr=as.factor(replace_na(as.character(cq3a3ayr),"No")))
+
+df <- 
+  df %>% mutate(cq3a3ayr = fct_recode(cq3a3ayr, "Yes" = "2015-2016",
+                                    "Yes" = "Don't Know",
+                                    "No" = "No",
+                                    "Yes"= "Prior to 2015"))
+df %>% count(cq3a3ayr)
+
+```
+
+## cq3f1 How many hours per week on average in this job during term-time
+
+```{r}
+
+df %>% count(cq3f1)
+
+df <- 
+  df %>% mutate(cq3f1 = fct_recode(cq3f1, NULL = "Don't Know",
+                                    "Yes" = "Yes",
+                                     "No"= "No"))
+
+```
+
+## cq3f5 Do you ever do any work for a business owned or run by a member of your      family (paid or unpaid work)
+
+```{r}
+
+df %>% count(cq3f5)
+
+df <- 
+  df %>% mutate(cq3f5 = fct_recode(cq3f5, NULL = "Don't Know",
+                                    "Yes" = "Yes",
+                                     "No"= "No"))
+```
+
+
+## cq3f6 During this/your final school year had a short term work experience      placement, as part of your school curriculum
+
+```{r}
+
+df %>% count(cq3f6)
+
+df <- 
+  df %>% mutate(cq3f6 = fct_recode(cq3f6, NULL = "Don't Know",
+                                    "Yes" = "Yes",
+                                     "No"= "No"))
+
+```
+
+
+## region
+
+```{r}
+
+df %>% count(adsd60)
+
+```
+
+
+
+## Final dimensions of dataset
+
+```{r}
+dim(df)
+
+
+```
+31 vars left.
+
+
+
+## Save rds
+```{r out.width="100%", message= FALSE, warnings = FALSE}
+
+
+#View(df)
+
+saveRDS(df, here("CATAv2","R_ob","Cata_W3_sub_tidy.RDS" ))
+```
+

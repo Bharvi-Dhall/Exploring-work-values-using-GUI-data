@@ -1,0 +1,316 @@
+---
+title: "Merge and Imputation w2 and w3"
+author: "Bharvi Dhall"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width=5, fig.height=5, figs="figsBD/")
+```
+
+Goal : Take school type values from wave 3 as it is and impute the missing ones from wave 2.
+
+
+## Loading Libraries
+
+```{r Loading_Libraries}
+
+library(tidyverse)
+library(here)
+library(labelled)
+library(haven)
+
+```
+
+## Read the Robject from wave 3
+Using only variables shortlisted for GUI conference.
+
+data from wave 3 -> dw3
+Unique Identifier Household ID -> ID
+No of boys enrolled -> p3q4a
+No of girls enrolled -> p3q4b
+
+
+```{r}
+
+here::i_am("CATAv2/00b_TD_datasetup.Rmd")
+wave3 <- readRDS(here("CATAv2","R_ob","Cata_data_W3_sub.RDS"))
+dim(wave3)
+# [1] 6216   33
+
+#View(wave3)
+
+
+
+#Looking at the unique Identifier Household id
+length(unique(wave3$ID))
+#6216
+
+#View(wave3[1:10, c("ID","p3q4a","p3q4b")])
+
+
+
+```
+
+## Principal's Questionnaire: No of boys and girls wave 3
+Note: taking don't know as other (which is non zero)
+other_level (an argument of fct_collapse : Value of level used for "other" values. Always placed at end of levels.)
+
+
+```{r}
+
+dw3<-wave3
+#dw3 %>% count(across(p3q4b:p3q4a)) %>% View()
+
+dw3 %>% mutate(p3q4b = fct_collapse(p3q4b, no = "0" , NULL = NA, other_level = "yes")) -> dw3
+dw3 %>% mutate(p3q4a = fct_collapse(p3q4a, no = "0" , NULL = NA, other_level = "yes")) -> dw3
+
+
+
+# create a column school_type which indicated whether school is single-sex or mixed
+
+dw3 <- dw3 %>% mutate(school_type= case_when(
+   p3q4b == "yes" & p3q4a == "yes" ~ "mixed",
+   p3q4b == "yes" | p3q4a == "yes" ~ "single"))
+
+
+
+
+```
+
+
+## Read the Robject from wave 2
+
+data from wave 2 -> dw2
+Unique Identifier Household ID -> zid01
+
+```{r}
+
+dw2 <- readRDS(here("CATAv2","R_ob","Cata_data_W2.RDS"))
+dim(dw2)
+# [1] 7525  913
+
+#looking at the unique identifier Household ID(zid01)
+length(unique(dw2$zid01))
+#7525
+
+
+
+```
+
+## Get unique ID and no of boys and girls from wave 2
+
+No of boys enrolled -> bhpc04a
+No of girls enrolled -> bhpc04b
+
+```{r}
+
+temp.dw2 <- dw2 %>% 
+  select(zid01, bhpc04a, bhpc04b)
+
+
+```
+
+## Principal's Questionnaire: No of boys and girls wave 2
+
+
+```{r}
+
+#temp.dw2 %>% count(across(bhpc04a:bhpc04b)) %>% View()
+
+# for boys
+temp.dw2 %>% mutate(bhpc04a = fct_collapse(bhpc04a, no = "0" , NULL = NA, other_level = "yes")) -> temp.dw2
+
+# for girls
+temp.dw2 %>% mutate(bhpc04b = fct_collapse(bhpc04b, no = "0" , NULL = NA, other_level = "yes")) -> temp.dw2
+
+
+# create a column school_type which indicated whether school is single-sex or mixed
+
+temp.dw2 <- temp.dw2 %>% mutate(school_type_w2= case_when(
+   bhpc04a == "yes" & bhpc04b == "yes" ~ "mixed",
+   bhpc04a == "yes" | bhpc04b == "yes" ~ "single"))
+
+# only taking school_type_w2
+temp2 <- temp.dw2 %>% 
+  select(zid01,school_type_w2)
+
+```
+
+Note: wave 2 had only 400 approx missing whereas wave 3 had over 1300 missing for these columns
+
+## Merge w2 and w3
+
+
+```{r}
+
+w3_sub <- merge(dw3,temp2,by.x = "ID", by.y = "zid01", all.x=TRUE)
+
+# Na's wave 3
+sum(is.na(w3_sub$school_type)) #1359
+
+# Na's wave 2
+sum(is.na(w3_sub$school_type_w2))  #405
+
+
+```
+
+Is the school type consistent across the two waves
+
+```{r}
+
+#looking at the complete cases
+
+temp_df <- w3_sub[,c("ID","school_type","school_type_w2")]
+temp_df <- temp_df[complete.cases(temp_df),]
+
+#View(temp_df)
+#dim(temp_df) #4548
+
+#match columns
+all(temp_df$school_type ==  temp_df$school_type_w2)
+#False
+
+#looking at count of matched
+sum(temp_df$school_type ==  temp_df$school_type_w2) #4249
+
+#Mismatched
+sum(temp_df$school_type != temp_df$school_type_w2)  #299
+
+temp_df %>% 
+  filter(temp_df$school_type != temp_df$school_type_w2) 
+
+temp_mismatch <- temp_df %>% 
+  filter(temp_df$school_type != temp_df$school_type_w2) %>%
+  select(ID)
+
+
+# Wave 3
+wave3[wave3$ID %in% unlist(temp_mismatch),c("p3q4a","p3q4b")]
+# Wave 2
+dw2[dw2$zid01 %in% unlist(temp_mismatch),c("bhpc04a","bhpc04b")]
+
+
+#View(w3_sub)
+
+
+```
+
+Growing Up in Ireland is a longitudinal study based on a fixed panel
+design. This means that the project follows the children and their families who were recruited into the study at 9 years of age for re-interview on several subsequent occasions. 
+
+We can see that the school type is not consistent in the two waves. This can happen when the study child has changed schools.
+
+Now we will keep the school type obtained from wave 3 as it is and impute the missing one's from wave 2.
+
+```{r}
+
+w3_sub <- w3_sub %>% 
+    mutate(imp_school_type = coalesce(school_type,school_type_w2)) 
+
+
+sum(is.na(w3_sub$imp_school_type))  #96
+
+sum(is.na(w3_sub$school_type)) # 1359 were missing
+sum(w3_sub$school_type ==  w3_sub$imp_school_type, na.rm = TRUE)
+
+```
+
+Adding imp_school_type to wave 3 data
+```{r}
+wave3$imp_school_type <- w3_sub$imp_school_type
+df_names <- wave3 %>%sjlabelled::get_label() %>% enframe()
+#View(df_names)
+
+```
+
+## Looking at the pricipal's questionnaire to get the school ID
+
+
+```{r}
+
+w3 <- readRDS(here('Data', 'RObjects_created_using_GUI','Wave3_GUI_17yr.RDS'))
+
+df3 <- w3 %>%
+  mutate_if(
+    is.labelled,
+    ~as_factor(.x)
+  )
+
+```
+
+
+```{r}
+# WAVE 3
+# Looking at the responses from principles to see if we can figure out unique schools
+teach3 <- select(df3, c(ID, w3prin,starts_with("p3q"))) 
+teach3 %>% count(w3prin) # 1359 NA
+
+dim(teach3)
+
+uteach3 <- distinct(select(teach3, -ID))
+dim(uteach3) 
+# [1] 463 145
+
+uteach3$schoolID <- paste0("W3", 1:nrow(uteach3))
+
+# Left join principal ID with wave3
+teach <- left_join(teach3, uteach3)
+dim(teach)
+
+prin3 <- teach %>% select(ID, schoolID)
+
+wave3_sub <- left_join(wave3,prin3,by = "ID")
+
+wave3_sub %>% count(schoolID) 
+
+```
+
+
+
+
+## Merging Region with wave 1
+Some Notes:
+
+Variable Region: Urban or Rural refers to the location of the household and has been derived from the Primary Caregivers Questionnaire (Wave 1)- This variable is only available in Wave 1
+
+Read R object from wave 1
+```{r}
+
+dw1 <- readRDS(here("CATAv2","R_ob","Cata_data_W1.RDS"))
+dim(dw1)
+
+
+#looking at the unique identifier Household ID(zid01)
+length(unique(dw1$zid01))
+
+#Looking at the region
+levels(dw1$adsd60)
+
+#subsetting wave 1 dataset
+temp.dw1 <- dw1 %>%
+  select(zid01,adsd60)
+
+#merge wave 3 and wave 1 by left join
+
+wave3_sub2 <- merge(wave3_sub,temp.dw1 ,by.x = "ID", by.y = "zid01", all.x=TRUE)
+
+dim(wave3_sub2)
+#[1] 6216   43
+
+```
+
+
+
+
+Saving as R object
+
+```{r}
+
+# Saving wave1_gui as .Rdata
+saveRDS(wave3_sub2, here("CATAv2","R_ob", "Cata_w3_imputed.RDS" ))
+
+```
+
+

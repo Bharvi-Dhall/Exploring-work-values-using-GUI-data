@@ -1,0 +1,445 @@
+---
+title: "02_TD_Graphs_for_Paper"
+author: "Bharvi Dhall"
+date: "`r Sys.Date()`"
+output: html_document
+---
+Note- Run 00a_TD, 00b_TD, 01_TD before running this file
+Install package performance to complete kniting file.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width=10, fig.height=5, dpi = 300, fig.path = "GUIVIS_Plots/", warning = FALSE,message = FALSE)
+```
+
+
+This file  contains graphs for the paper
+
+
+## Loading Library
+
+```{r loading_libraries}
+library(here)
+library(sjlabelled) 
+library(tidyverse)
+library(ggplot2)
+library(Hmisc) #for assigning labels
+library(manyModelViz) # for creating heatmap plots
+library(GGally) #for visualizing multiple models
+library(tidymodels) # for creating generic model formulas
+library(ggeffects)
+library(performance) # for R-squared
+library(pROC)#for ROC curve
+library(scales)
+library(patchwork)
+library(correlation)
+library(corrplot)
+
+
+```
+
+# Read in the tidy dataset
+
+```{r Reading_Dataset}
+
+here::i_am("CATAv2/03_TD_Graphs.Rmd")
+df <- readRDS(here("CATAv2","R_ob","Cata_W3_sub_tidy.RDS" ))
+
+dim(df)
+# [1] 6216   31
+#View(df)
+#names(df)
+
+
+```
+
+# Assigning Labels to short names
+
+```{r Assigning_labels }
+
+# Loading named vector
+source(here("CATAv2/Varnames.R"))
+
+# Creating a named vector
+data <- Hmisc::upData(df,labels = var.labels)
+
+#View(data)
+
+attributes(data$cq3g2a)
+
+# changing labels to column names
+names(data) <- colnames(label_to_colnames(data))  # uses sjlabelled
+
+
+
+#Removing 3 work related variables
+data$part_time_job <- NULL
+data$work_for_business <- NULL
+data$work_exp <- NULL
+data$household_region <- NULL
+
+
+
+# Looking the names
+names(data)
+```
+
+# Exploratory plots
+
+```{r corrplot}
+
+data1 <- data %>% dplyr::mutate(across(high_inc:other, ~ factor(.x))) %>% dplyr::select(-ID, -schoolID) 
+
+data1$school_type <- factor(data1$school_type)
+
+
+responses <- names(data1)[1:10]
+preds <- names(data1)[-(1:11)]
+
+
+
+library(correlation)
+# library(corrplot)
+datap <- na.omit(data1[,c(responses,preds)])
+
+datap %>% count(PC1_edu)
+
+datap <- 
+  datap %>% mutate(PC1_edu = fct_recode(PC1_edu, 
+                                  School ="Prim",
+                                  School="JC", 
+                                  LC = "LC", 
+                                  LC = "No_degree",
+                                  Deg = "Deg",
+                                  Deg = "Postgrad"))
+datap %>% count(PC1_emp)
+
+datap <- 
+  datap %>% mutate(PC1_emp = fct_recode(PC1_emp, 
+                                  Other ="Education",
+                                  Work="Work", 
+                                  Other = "Unemployed", 
+                                  Other = "Home", 
+                                  Other = "Other"))
+
+for (i in 1:ncol(datap)) {
+  f <- datap[[i]]
+  if (class(f)[1] =="labelled")
+    class(datap[[i]]) <- class(f)[-1]
+}
+
+datap$gender <- as.numeric(datap$gender)-1
+names(datap)[11]<- "genderF"
+
+
+datap$TY <- as.numeric(datap$TY =="Yes")
+names(datap)[18]<- "TY-Y"
+
+datap$PC1_emp <- as.numeric(datap$PC1_emp =="Work")
+names(datap)[13]<- "PC1_empL_Work"
+
+datap$school_type <- as.numeric(datap$school_type =="single")
+names(datap)[names(datap)=="school_type"]<- "School_single"
+
+datap$left_school <- as.numeric(datap$left_school =="Yes")
+names(datap)[20]<- "Left_SchooL_Y"
+
+
+for (i in 1:10) datap[[i]]<- as.numeric(datap[[i]])
+
+
+pcorc <- correlation(datap, include_factors = T)
+pcor <- as.data.frame(pcorc[,1:3])
+
+varlevelsY <- rownames(as.matrix(pcorc))[1:10]
+oY <- corrMatOrder(as.matrix(pcorc)[1:10,1:10], order="hclust", hclust.method="average")
+
+varlevelsX <- rownames(as.matrix(pcorc))[-(1:10)]
+
+cX <- as.matrix(pcorc)[-(1:10),-(1:10)]
+# cX[2:7,2:7]<- 1
+# cX[8:12,8:12]<- 1
+oX <- corrMatOrder(cX, order="hclust", hclust.method="average")
+
+newlevels <- c(varlevelsY[oY], varlevelsX[oX])
+
+w <- which(unlist(map(strsplit(pcor$Parameter1, ".", fixed=T),1)) == 
+             unlist(map(strsplit(pcor$Parameter2, ".", fixed=T),1)))
+pcor[w,3]<- 0  # zero our correlations between levels of factor
+
+ggplot(data=pcor, aes(x=Parameter1, y=Parameter2, fill=r))+ geom_tile()+
+  geom_tile(aes(x=Parameter2, y=Parameter1))+
+  xlab("")+ylab("")+
+  scale_x_discrete(position = "top", limits=newlevels) + # x labels at top
+  scale_y_discrete(limits = rev(newlevels))+ # reverse y axis
+  scale_fill_gradient2(low ="red3", mid="white", high = "blue3", midpoint=0, limits=c(-1,1))+
+  theme_light() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        aspect.ratio = 1 ,# for squares
+        axis.text.x = element_text(angle = 30, hjust = 0)
+  )
+
+
+ 
+#
+```
+
+
+
+#modelling
+
+
+```{r Main_effects}
+# Making a vector for response variables
+y <- data[,2:11] # omit other
+names(y)
+
+#get rid of IDs and create a dataframe for predictors
+x <- data[,-c(2:12,which(names(data)=="ID"), which(names(data)== "schoolID"))]
+names(x)
+```
+
+
+Rescaling all the numerical variables between 0 and 1
+
+```{r}
+sapply(x, class)
+num_vars <- names(which(sapply(x, is.numeric)))
+
+x$equalised_inc <- as.numeric(x$equalised_inc)
+x$work_imp <- as.numeric(x$work_imp)
+x$religion_imp <- as.numeric(x$religion_imp)
+x$own_family_imp <- as.numeric(x$own_family_imp)
+x$conscientious_score <- as.numeric(x$conscientious_score)
+x$cognitive_scores <- as.numeric(x$cognitive_scores)
+x$parental_interactions <- as.numeric(x$parental_interactions)
+x$career_guidance <- as.numeric(x$career_guidance)
+
+summary(x[,num_vars])
+x[,num_vars] <- lapply(x[,num_vars],function(x) rescale(x,c(0,1)))
+summary(x[,num_vars])
+
+```
+
+
+
+
+## Selecting interaction terms.
+Selecting highly significant interaction (only dark blue)
+```{r final_mod_without_order}
+
+
+# Getting rid of some predictors
+x1 <- x %>%
+  dplyr::select(-c("TY",  "PC1_emp" , "PC1_edu", "left_school"))
+
+
+
+# Refit model
+fits.1 <- map(y, ~ glm(.x ~ . +own_family_imp*gender+
+                           conscientious_score*gender+
+                           school_type*gender ,
+                       family="binomial",data=x1))
+
+
+
+d_new <- purrr::map_dfr(fits.1, ~ broom::tidy(car::Anova(.x)), .id="response")
+d1_new <- dplyr::filter(d_new, term != "Residuals")
+
+cols <- c("blue", "cyan", "grey95")
+final.plot <- modelHeatmap(d1_new, "term", "response", "p.value", xorder="increasing", yorder="increasing")+
+  ggplot2::scale_fill_manual(values = cols)+ggplot2::xlab("Variables driving Work-Values") + ggplot2::ylab("Work-Values") + ggplot2::ggtitle("Significant Interactions with Gender")
+
+final.plot
+########################################################
+
+```
+
+```{r final_mod_ordered}
+# plot the interactions and their main effects together
+reorder_pred <- c("cognitive_scores","gender","work_imp","own_family_imp","gender:own_family_imp","conscientious_score","gender:conscientious_score","equalised_inc","career_guidance","religion_imp","household_region","school_type","gender:school_type","parental_interactions")
+
+
+
+plot1 <- modelHeatmap(d1_new, "term", "response", "p.value", xorder=reorder_pred, yorder="increasing") +
+  ggplot2::scale_fill_manual(values = cols) +
+  ggplot2::xlab("Variables driving Work-Values") +
+  ggplot2::ylab("Work-Values") +
+  ggplot2::ggtitle("Final Model revealing potential Work Value Drivers")
+
+plot1
+```
+
+
+
+# Coefficient Plots for all Work Values
+
+
+```{r finl_model_coeff ,fig.width=14, fig.height=8}
+
+#coefficients plot of main effects which donot have interactions
+include_vars <- base::setdiff(names(x1),c("own_family_imp","gender","conscientious_score","school_type"))
+```
+
+
+```{r Cf_help ,fig.width=14, fig.height=8}
+#plotting helping society
+
+GGally::ggcoef_model(fits.1$help_society,include = include_vars, shape_values= c(19,1), point_stroke=.5, errorbar_coloured=F, point_size=3 )+ ggtitle("Main effects for Helping Society")
+```
+
+
+```{r Cf_job ,fig.width=14, fig.height=8}
+#plotting job security
+ggcoef_model(fits.1$job_security,include = include_vars, shape_values= c(19,1), point_stroke=.5, errorbar_coloured=F, point_size=3 )+ ggtitle("Main effects for Job Security")
+```
+
+
+```{r Cf_travel ,fig.width=14, fig.height=8}
+#plotting travel abroad
+ggcoef_model(fits.1$travel_abroad,include = include_vars, shape_values= c(19,1), point_stroke=.5, errorbar_coloured=F, point_size=3 )+ ggtitle("Main effects for Travel Abroad")
+```
+
+
+```{r Cf_int ,fig.width=14, fig.height=8}
+#plotting interesting job
+ggcoef_model(fits.1$interesting_job,include = include_vars, shape_values= c(19,1), point_stroke=.5, errorbar_coloured=F, point_size=3 )+ ggtitle("Main effects for Interesting Job")
+```
+
+
+```{r Cf_boss ,fig.width=14, fig.height=8}
+#plotting being your own boss
+ggcoef_model(fits.1$being_boss,include = include_vars, shape_values= c(19,1), point_stroke=.5, errorbar_coloured=F, point_size=3 )+ ggtitle("Main effects for Being your own boss")
+```
+
+
+```{r Cf_flex ,fig.width=14, fig.height=8}
+#plotting flexible hours
+ggcoef_model(fits.1$flex_hours,include = include_vars, shape_values= c(19,1), point_stroke=.5, errorbar_coloured=F, point_size=3 )+ ggtitle("Main effects for Flexible Hours")
+```
+
+
+```{r Cf_time ,fig.width=14, fig.height=8}
+#plotting time off
+ggcoef_model(fits.1$time_off,include = include_vars, shape_values= c(19,1), point_stroke=.5, errorbar_coloured=F, point_size=3 )+ ggtitle("Main effects for Time Off")
+```
+
+
+```{r Cf_train ,fig.width=14, fig.height=8}
+#plotting training opportunities
+ggcoef_model(fits.1$training_opp,include = include_vars, shape_values= c(19,1), point_stroke=.5, errorbar_coloured=F, point_size=3 )+ ggtitle("Main effects for Training Opportunity")
+```
+
+
+```{r Cf_high ,fig.width=14, fig.height=8}
+#plotting high income
+ggcoef_model(fits.1$high_inc,include = include_vars, shape_values= c(19,1), point_stroke=.5, errorbar_coloured=F, point_size=3 )+ ggtitle("Main effects for High Income")
+```
+
+
+```{r Cf_good ,fig.width=14, fig.height=8}
+#plotting good for career
+ggcoef_model(fits.1$good_for_career,include = include_vars, shape_values= c(19,1), point_stroke=.5, errorbar_coloured=F, point_size=3 )+ ggtitle("Main effects for Good for Career")
+
+
+
+```
+
+#Looking at the effects of variables
+
+```{r ep-job ,fig.width=14, fig.height=8}
+# Job Security with school type and gender
+g1 <- ggpredict(fits.1$job_security, c("school_type", "gender"))
+plot(g1)+geom_line(aes(linetype=group), 
+            position=position_dodge(width=.25))
+```
+
+
+```{r ep-travelGender ,fig.width=14, fig.height=8}
+# Travel Abroad with Conscientious score and gender
+g2 <- ggpredict(fits.1$travel_abroad, c("conscientious_score", "gender"))
+plot(g2)
+```
+
+
+```{r  ep-InterestingJob ,fig.width=14, fig.height=8}
+# Interesting Job with Conscientious score and gender
+g3 <- ggpredict(fits.1$interesting_job, c("conscientious_score", "gender"))
+plot(g3)
+```
+
+# Effects plot of own family importance and gender for different work values
+```{r ep-help ,fig.width=14, fig.height=8}
+#plotting helping society
+g4 <- ggpredict(fits.1$help_society, c("own_family_imp", "gender"))
+plot(g4)
+```
+
+
+```{r ep-Jobsec ,fig.width=14, fig.height=8}
+#plotting job security
+g5 <- ggpredict(fits.1$job_security, c("own_family_imp", "gender"))
+plot(g5)
+```
+
+
+```{r ep-travel ,fig.width=14, fig.height=8}
+#plotting travel abroad
+g6 <- ggpredict(fits.1$travel_abroad, c("own_family_imp", "gender"))
+plot(g6)
+```
+
+
+```{r ep-Intjob ,fig.width=14, fig.height=8}
+#plotting interesting job
+g7 <- ggpredict(fits.1$interesting_job, c("own_family_imp", "gender"))
+plot(g7)
+```
+
+
+```{r ep-boss ,fig.width=14, fig.height=8}
+#plotting being your own boss
+g8 <- ggpredict(fits.1$being_boss, c("own_family_imp", "gender"))
+plot(g8)
+```
+
+
+```{r ep-time ,fig.width=14, fig.height=8}
+#plotting time off
+g9 <- ggpredict(fits.1$time_off, c("own_family_imp", "gender"))
+plot(g9)
+```
+
+
+```{r ep-train ,fig.width=14, fig.height=8}
+#plotting training opportunities
+g10 <- ggpredict(fits.1$training_opp, c("own_family_imp", "gender"))
+plot(g10)
+```
+
+
+```{r ep-high ,fig.width=14, fig.height=8}
+#plotting high income
+g11 <- ggpredict(fits.1$high_inc, c("own_family_imp", "gender"))
+plot(g11)
+```
+
+
+```{r ep-goodCareer ,fig.width=14, fig.height=8}
+#plotting good for career
+g12 <- ggpredict(fits.1$good_for_career, c("own_family_imp", "gender"))
+plot(g12)
+```
+
+
+```{r ep-flexhours ,fig.width=14, fig.height=8}
+#plotting for flexible hours
+g13 <- ggpredict(fits.1$flex_hours, c("own_family_imp", "gender"))
+plot(g13)
+
+    
+
+
+```
+

@@ -1,0 +1,341 @@
+---
+title: "04_TD_EDA"
+author: "Bharvi Dhall"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Loading Libraries
+
+```{r Loading_Libraries}
+
+library(tidyverse)
+library(here)
+library(labelled)
+library(haven)
+library(vcdExtra)
+library(vcd)
+library(ggalluvial)
+library(ggmosaic)
+```
+
+# Read the wave 3 dataset
+```{r}
+
+here::i_am("CATAv2/04_TD_EDA.Rmd")
+wave.3 <- readRDS(here('Data','RObjects_created_using_GUI','Wave3_GUI_17yr.RDS'))
+
+# We can use as_factor() to convert these variables to fct variables keeping and showing only the labels.
+
+
+
+#Looking at the unique Identifier Household id
+length(unique(wave.3$ID))
+#6216
+
+```
+
+# Read data from wave 2
+
+```{r}
+data.2 <- readRDS(here("CATAv2","R_ob","Cata_data_W2.RDS"))
+dim(data.2)
+# [1] 7525  913
+
+#looking at the unique identifier Household ID(zid01)
+length(unique(data.2$zid01))
+#7525
+
+data.2 <- data.2 %>%
+  mutate_if(
+    is.labelled,
+    ~as_factor(.x)
+  )
+
+
+```
+
+# Merge wave 3 and 2
+
+```{r}
+
+data_merge <- merge(wave.3,data.2,by.x = "ID", by.y = "zid01", all.x=TRUE)
+
+dim(data_merge)
+#[1] 6216 2134
+
+#View(data_merge)
+
+data_merge <- data_merge %>%
+  mutate_if(
+    is.labelled,
+    ~as_factor(.x)
+  )
+
+
+
+```
+
+
+# Friends and gender
+cq3g4i "How important - Friends and acquaintances"How important - Friends and acquaintances
+
+
+cq3e1d -    How often have/did your parent discussed your plans for the future
+
+cq3c1f2 - f2. How important in helping decide what to do after leaving school - Your
+ 
+
+```{r}
+
+
+
+ggplot(data=data_merge, mapping= aes(x=cq3g4i, ..count.. )) + 
+  geom_bar(aes(fill =p2sexW3), position = "dodge") + xlab("How important are Friends and acquaintances ?") + guides(fill=guide_legend(title="Gender"))
+
+#changing how often to numeric
+data_merge <- 
+  data_merge %>% mutate(cq3e1d = fct_recode(cq3e1d, NULL = "Don't Know",
+                                       NULL ="Refusal",
+                                  never = "Never or hardly ever", 
+                                  fewyear = "A few times a year", 
+                                  oncemon = "About once a month", 
+                                  sevmon = "Several times a month",
+                                  sevweek = "Several times a week"))
+
+
+data_merge %>%
+   mutate(cq3e1d = as.numeric(cq3e1d)) -> data_merge
+
+#getting rid of DK and refusal
+data_merge <- 
+  data_merge %>% mutate(cq3c1f2 = fct_recode(cq3c1f2, NULL = "Don't Know",
+                                       NULL ="Refusal",
+                                  VeryImp = "Very important", 
+                                  Imp = "Important", 
+                                  NotVeryImp = "Not very important"))
+
+df <- as.data.frame(table(data_merge$cq3c1f2, data_merge$cq3e1d))
+
+
+
+ggplot(df, aes(Var1, Var2)) +
+   geom_tile(aes(fill = Freq), colour = "black") +
+   scale_fill_gradient(low = "white", high = "steelblue")+xlab("How important is your mother in helping decide what to do after leaving school")+ylab("How often have/did your parent discussed your plans for the future") + ggtitle("Heatmap of relationship between two categorical variables")
+
+
+
+
+
+```
+
+Girls consider friends to be more important than boys
+
+# Importance of friends and family
+cq3d17e -  How important choice of post-school institution - My friend(s) were going  there
+
+cq3c1f2 mother
+
+```{r}
+
+ggplot(data=data_merge, mapping= aes(x=cq3d17e, ..count.. )) + 
+  geom_bar(aes(fill =p2sexW3), position = "dodge") + xlab("Choice of college on the basis of friends?") + guides(fill=guide_legend(title="Gender"))
+
+```
+
+
+
+# How far student thinks he will go in education- bcce50 ?
+pc3f1educ F1. What is the highest level of education you have completed
+sc3e1educ F1. What is the highest level of education you have completed
+
+
+```{r}
+#mothers edu
+data_merge <- 
+  data_merge %>% mutate(pc3f1educ = fct_recode(pc3f1educ, NULL = "Don't Know",
+                                       NULL ="Refusal",
+                                  Prim = "None/Primary school", 
+                                  JC = "Lower Secondary", 
+                                  LC = "Hi Sec/TechVoc/UppSec+Tech/Voc", 
+                                  No_degree = "Non Degree",
+                                  Deg = "Primary Degree",
+                                  Postgrad = "Postgrad"))
+
+levels(data_merge$bcce50)
+
+#fathers edu
+data_merge <- 
+  data_merge %>% mutate(sc3e1educ = fct_recode(sc3e1educ, NULL = "Don't Know",
+                                       NULL ="Refusal",
+                                  Prim = "None/Primary School", 
+                                  JC = "Lower Secondary", 
+                                  LC = "Hi Sec/TechVoc/UppSec+Tech/Voc", 
+                                  No_degree = "Non Degree",
+                                  Deg = "Primary Degree",
+                                  Postgrad = "Postgrad"))
+
+#study child
+data_merge <- 
+  data_merge %>% mutate(bcce50 = fct_recode(bcce50, NULL = "Don't Know",
+                                       NULL ="Refusal", 
+                                  JC = "Junior Cert", 
+                                  LC = "Leaving Cert", 
+                                  Diploma = "Certificate or Diploma (including plc., apprenticeship)",
+                                  Degree = "Degree or higher degree"))
+
+
+#three way table
+ df3 <- ftable(data_merge$bcce50, data_merge$pc3f1educ, data_merge$p2sexW3, dnn = c("ypedu","pcedu","pgender"))
+ 
+df4 <- ftable(data_merge$bcce50, data_merge$sc3e1educ, data_merge$p2sexW3, dnn = c("ypedu","scedu","pgender"))
+ 
+
+  
+
+# PC
+ lnames <- list(pgender = c("M", "F"))
+ vnames <- list(pgender = "Young Persons gender",ypedu = "How far student thinks he will go in education", pcedu = "Primary Caregiver's highest level of education")
+vcd::mosaic(~ pgender + ypedu + pcedu, data = df3,
+       highlighting = "pgender", highlighting_fill = c("lightblue", "pink"),
+       direction = c("v", "h", "v"),set_labels=lnames,set_varnames = vnames)
+
+#SC
+ lnames2 <- list(pgender = c("M", "F"))
+ vnames2 <- list(pgender = "Young Persons gender",ypedu = "How far student thinks he will go in education", pcedu = "Secondary Caregiver's highest level of education")
+vcd::mosaic(~ pgender + ypedu + scedu, data = df4,
+       highlighting = "pgender", highlighting_fill = c("lightblue", "pink"),
+       direction = c("v", "v", "h"),set_labels=lnames2,set_varnames = vnames2)
+
+
+#Proportions on horizontal axis represents the number of observations for each level of the X variable. The vertical length of each rectangle is proportional to the proportion of Y variable in each level of X variable.
+
+
+ggplot(data=data_merge, mapping= aes(x=bcce50, ..count.. )) +
+  geom_bar(aes(fill =p2sexW3), position = "dodge") + 
+  xlab("How far student thinks he will go in education?") +
+  theme(axis.text.x = element_text(angle = 120, vjust = 0.5, hjust=1))+
+  guides(fill=guide_legend(title="Gender")) +
+  scale_x_discrete(label = function(x) stringr::str_trunc(x, 12))
+
+table(data_merge$p2sexW3)
+
+```
+
+
+
+# Like or dislike being at school
+
+cq3b26a - Do you dislike school?
+
+```{r}
+
+
+
+ggplot(data=data_merge, mapping= aes(x=cq3b26a, ..count.. )) + 
+  geom_bar(aes(fill =p2sexW3), position = "dodge") + xlab("How important are Friends and acquaintances ?") + guides(fill=guide_legend(title="Gender"))
+
+table(data_merge$cq3b26a,data_merge$p2sexW3)
+table(data_merge$cq3b26a,data_merge$CognitiveMathsTotal)
+
+
+
+```
+
+Dislike school and maths score?
+
+
+```{r}
+
+data_merge %>%
+   mutate(CognitiveMathsTotal = as.numeric(CognitiveMathsTotal)) -> data_merge
+
+data_merge %>% filter(is.na(cq3b26a) == FALSE) %>% 
+  ggplot(mapping= aes(x= cq3b26a, y = as.numeric(CognitiveMathsTotal), fill = p2sexW3)) + 
+  geom_boxplot() +
+  xlab("Do you dislike school?")+ ylab("cognitive maths score") +guides(fill=guide_legend(title="Gender"))+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1))
+
+
+```
+
+students with low cognitive maths scores tend to dislike school
+
+# Has secondary education prepared you for the world of work?
+cq3b28k - Has second-level education benefited - In preparing you for the world of work
+
+cq3b26a- . Agree or not - I dislike(d) being at school
+
+
+```{r}
+data_merge <- 
+  data_merge %>% mutate(cq3b28k = fct_recode(cq3b28k, NULL = "Don't Know",
+                                       NULL ="Refusal", 
+                                  Yes = "Yes, a lot", 
+                                  Little = "Yes, some", 
+                                  No = "No help"))
+data_merge <- 
+  data_merge %>% mutate(cq3b26a = fct_recode(cq3b26a, NULL = "Don't Know",
+                                       NULL ="Refusal", 
+                                  Yes = "Strongly agree", 
+                                  Yes = "Agree", 
+                                  No = "Disagree",
+                                  No = "Strongly disagree"))
+
+#three way table
+ df5 <- as.data.frame(ftable(data_merge$bcce50, data_merge$cq3b28k, data_merge$p2sexW3, data_merge$cq3b26a, dnn = c("future_edu","school_help","gender","dislike_school")))
+ 
+ ggplot(data = df5,
+       aes(axis1 = dislike_school, axis2 = school_help, axis3 = future_edu,
+           y = Freq)) +
+  scale_x_discrete(limits = c("dislike_School", "school_help", "future_edu"), expand = c(.2, .05)) +
+  geom_alluvium(aes(fill = gender)) +
+  geom_stratum() +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+  theme_minimal() 
+
+ggplot(data=data_merge, mapping= aes(x= cq3b26a, y = as.numeric(CognitiveMathsTotal), fill = p2sexW3)) + 
+  geom_boxplot() +
+  xlab("Do you dislike school?")+ ylab("cognitive maths score") +guides(fill=guide_legend(title="Gender")) + facet_wrap(~cq3b28k) +  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1))
+
+table(data_merge$cq3b28k,data_merge$CognitiveMathsTotal)
+
+
+table(data_merge$cq3b4c)
+
+```
+
+# Cognitive naming girls vs boys
+
+```{r}
+
+ggplot(data=data_merge, mapping= aes(x=as.numeric(CognitiveNamingTotal), ..count.. )) + geom_density(aes(fill =p2sexW3), position = "dodge", alpha = 0.3) + xlab("cognitive naming score") +guides(fill=guide_legend(title="Gender"))+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1))
+
+```
+
+# Cognitive vocab girls vs boys
+
+```{r}
+
+ggplot(data=data_merge, mapping= aes(x=as.numeric(CognitiveVocabularyTotal), ..count.. )) + geom_density(aes(fill =p2sexW3), position = "dodge", alpha = 0.3) + xlab("cognitive vocab score") +guides(fill=guide_legend(title="Gender"))+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1))
+
+```
+
+#Cognitive maths
+```{r}
+
+ggplot(data=data_merge, mapping= aes(x=CognitiveMathsTotal, ..count.. )) + geom_bar(aes(fill =p2sexW3), position = "dodge") + xlab("cognitive maths score") +guides(fill=guide_legend(title="Gender"))+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1))
+
+
+```
+
+# Living in Ireland?
+cq3l2a-  How likely do you think it is that you will still be living in Ireland in 5 years
+
+```{r}
+ggplot(data=data_merge, mapping= aes(x=cq3l2a, ..count.. )) + 
+  geom_bar(aes(fill =p2sexW3), position = "dodge") + xlab("How likely do you think it is that you will still be living in Ireland in 5 years") + guides(fill=guide_legend(title="Gender"))+ theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1))+ 
+  scale_x_discrete(label = function(x) stringr::str_trunc(x, 12))
+
+
+```
+

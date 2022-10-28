@@ -1,0 +1,102 @@
+---
+title: "03_TD_Graphs_for_Paper"
+author: "Bharvi Dhall"
+date: "`r Sys.Date()`"
+output: html_document
+---
+Note- Run 00a_TD, 00b_TD, 01_TD before running this file
+Install package performance to complete kniting file.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width=10, fig.height=5, dpi = 300, fig.path = "GUIVIS_Plots/", warning = FALSE)
+```
+
+
+This file  contains graphs for the paper
+
+
+## Loading Library
+
+
+## Setup the data
+```{r}
+library(ggupset)
+library(here)
+library(tidyverse)
+library(patchwork)
+
+here::i_am("CATAv2/04_TD_Graphs.Rmd")
+
+df <- readRDS(here("CATA","CATA_Robjects", "CATA_data_Wave3_subset_tidy.RDS"))
+#View(df)
+df1 <- as.matrix(df[,1:11])
+
+catavars <- c("highInc", "trainingOp","intJob","flexHrs", "hols", "ladder" , "boss", "helpSoc", "security", "travel", "other")
+df$choice <- lapply(1:nrow(df1), function(i) catavars[df1[i,]==1])
+
+df3 <- df[sapply(df$choice, length) ==3,]  # consider those who made exactly 3 choices
+
+```
+
+## Basic bar charts
+
+```{r barchart}
+names(df3)[1:11]<- catavars
+
+
+df3 %>% pivot_longer(cols=highInc:other, names_to = "selection")  %>% 
+  filter(value==1)  %>% 
+  count(selection,p2sexW3) %>% 
+  ggplot(aes(x=fct_reorder(selection,n, .desc=T), y=n)) + 
+  geom_col(aes(fill=p2sexW3), position="dodge")+ xlab("selection")
+```
+
+
+
+## Comparing males and females
+
+```{r choose3}
+df3 %>% ggplot(aes(x=choice, fill=p2sexW3)) +
+  geom_bar(position="fill") +
+  scale_x_upset(n_intersections = 10)
+```
+
+
+```{r choose3mf}
+
+df3 %>% filter(p2sexW3 =="female") %>%
+  count(choice) %>% slice_max(n, n=10) %>% pull(choice) -> choice_F
+
+df3 %>% filter(p2sexW3 =="male") %>%
+  count(choice) %>% slice_max(n, n=10) %>% pull(choice) -> choice_M
+pF<- filter(df, choice %in% choice_F & p2sexW3 =="female") %>%
+  ggplot(aes(x=choice)) +
+  geom_bar(fill= "#00BFC4") +
+  scale_x_upset() + xlab("females")+ ylim(0,330) 
+
+pM <- filter(df, choice %in% choice_M & p2sexW3 =="male") %>%
+  ggplot(aes(x=choice)) +
+  geom_bar(fill= "#F8766D") +
+  scale_x_upset() + xlab("males") + ylim(0,330) 
+
+pF+pM + ylab("")
+
+filter(df3, security==1 & helpSoc ==1) %>% count(p2sexW3)
+
+```
+
+```{r chi}
+
+
+
+df3$choiceStr <- sapply(df3$choice, paste, collapse='-')
+resid <- as.data.frame(chisq.test(df3$choiceStr, df3$p2sexW3)$residuals)
+names(resid)<- c("choice", "sex", "resid")
+
+resid %>% filter(abs(resid)>2) %>%
+  ggplot(aes(x=fct_reorder(choice, resid,.fun=first,.desc=TRUE),
+             y=resid, fill=sex))+ geom_col()+
+  axis_combmatrix(sep = "-")+ xlab("choice")
+
+```

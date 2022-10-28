@@ -1,0 +1,170 @@
+---
+title: "Data setup for CATA data"
+author: "Bharvi Dhall"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width=5, fig.height=5, figs="figsBD/")
+```
+
+# Setup CATA data by subsetting data from Wave 3
+File contains the code to get a subset of data set (GUI wave 3) concerning career choices from GUI wave 3.
+
+# Set file path
+
+```{r}
+library(here)
+here()
+  
+```
+
+# Loading Libraries
+
+```{r}
+library(tidyverse)
+library(labelled)
+library(haven)
+```
+
+# Reading GUI dataset from wave 3
+
+```{r}
+here::i_am("CATAv2/00a_TD_datasetup.Rmd")
+wave.3 <- readRDS(here('Data', 'RObjects_created_using_GUI','Wave3_GUI_17yr.RDS'))
+# Looking at the first 10 rows and columns
+#wave.3[1:10,1:10]
+# This is a tibble
+# dim(wave.3)  #6216
+#to check label
+# attributes(wave.3$cq3b8c2)
+# Notice that each variable is a dbl+lbl type. 
+
+# We can use as_factor() to convert these variables to fct variables keeping and showing only the labels.
+
+data.3 <- wave.3 %>%
+  mutate_if(
+    is.labelled,
+    ~as_factor(.x)
+  )
+
+# Create a subset of data. We will use the same data containing career driving factors.
+# The career anchors
+# colnames(data.3[696:706])
+#Selecting the career anchors
+
+# View(data.3)
+
+career_anchors <- data.3[,696:706]
+identical(data.3 %>% dplyr::select(contains("cq3g2")), career_anchors)
+#View(career_anchors)
+
+
+```
+
+
+## Adding variables to career_anchors
+
++ Few Additions
+pc3e2 - do you think you have a suitable accomodation (parent 1)
+pc3g18 - do you have a car you like
+pc3e26a Because of work responsibilities you have missed out on home or family  activities that you would have liked to have taken part in
+
++ Study child
+pc3e26b Because of work responsibilities your family time is less enjoyable and pc3e26b more pressured
+cq3b28k Has second-level education benefited - In preparing you for the world of  work Consulted to help decide what to do after leaving school  
+ 
+cq3c1a2 Guidance Counsellor - class session  Consulted to help decide what to do after leaving school - The Guidance
+ cq3c1a2 Counsellor - individual appointment
+ cq3c2a
+ cq3c2b
+ cq3c2c
+ cq3c2d
+ cq3c2e
+
+#cq3g1bclass -   Young Person's expected social class - Wave 3
+Adding the unique Identifier which is Household ID (ID)
+
+
+# Some interesting variables 
+cq3f1 -  . Ever in a part-time paid job in term-time while attending school or college  (don t include jobs during the school holidays)
+
+cq3f5-  Do you ever do any work for a business owned or run by a member of your      family (paid or unpaid work)
+
+cq3f6 - During this/your final school year had a short term work experience      placement, as part of your school curriculum
+```{r}
+# selecting gender, social class, mother and father's education to see how they impact the career choices
+
+w3_sub <- data.3 %>%
+  select(contains("cq3g2"), "p2sexW3","hsdclassW3","pc3f1educ","sc3e1educ", "cq3b33a","cq3b8c3","cq3b8c2", "CognitiveNamingTotal", "CognitiveMathsTotal", "CognitiveVocabularyTotal", "pc3f14", "sc3e14", "cq3k7a", "pc3c3", "sc3b1", "cq3e1a", "cq3e1b", "cq3e1c", "cq3e1d", "cq3e1f", "cq3c13a", "cq3c3","pc3e2", "p3q4a", "p3q4b","p3q5","cq3b17a")
+
+
+data_sub <- data.3 %>%
+  select("cq3g2a","cq3g2b","cq3g2c","cq3g2d","cq3g2e","cq3g2f","cq3g2g","cq3g2h","cq3g2i","cq3g2j","cq3g2k","p2sexW3","pc3f1educ","p1empW3","w3equivinc","cq3e1a","cq3e1b","cq3e1c","cq3e1d","cq3e1f","cq3c2a","cq3c2b","cq3c2c","cq3c2d","cq3c2e","cq3g4f","cq3g4h","cq3g4j","CognitiveNamingTotal","CognitiveMathsTotal","CognitiveVocabularyTotal","cq3b4a","w3cq_conscientious","ID","p3q4a", "p3q4b", "cq3a3ayr", "cq3f1","cq3f5","cq3f6" )
+
+
+
+w3_sub_ext <- data.3 %>%
+  select(contains("cq3g2"),"ID", "p2sexW3","hsdclassW3","pc3f1educ","sc3e1educ", "cq3b33a","cq3b8c3","cq3b8c2", "CognitiveNamingTotal", "CognitiveMathsTotal", "CognitiveVocabularyTotal", "pc3f14", "sc3e14", "cq3k7a", "pc3c3", "sc3b1", "cq3e1a", "cq3e1b", "cq3e1c", "cq3e1d", "cq3e1f", "cq3c13a", "cq3c3","pc3e2", "p3q4a", "p3q4b","p3q5","pc3e26b" ,"cq3b28k","cq3c1a2", "cq3c1a2", "cq3c2a" , "cq3c2b", "cq3c2c", "cq3c2d", "cq3c2e", "cq3g1bclass","cq3b17a")
+
+# KD: Save variable names
+df_names <- w3_sub %>%sjlabelled::get_label() %>% enframe()
+df_ext_names <- w3_sub_ext %>%sjlabelled::get_label() %>% enframe()
+write.csv(df_names, here("CATAv2", "df_names.csv"), row.names = FALSE)
+write.csv(df_ext_names, here("CATAv2", "df_ext_names.csv"), row.names = FALSE)
+
+```
+
+
+## Reading GUI dataset from wave 2
+```{r}
+
+wave.2 <- readRDS(here("Data", "RObjects_created_using_GUI","Wave2_GUI_13yr.RDS"))
+
+data.2 <- wave.2 %>%
+  mutate_if(
+    is.labelled,
+    ~as_factor(.x)
+  )
+
+#dim(data.2)   #7525
+
+
+
+```
+
+
+## Reading GUI dataset from wave 1
+```{r}
+
+wave.1 <- readRDS(here("Data", "RObjects_created_using_GUI","Wave1_GUI_9yr.RDS"))
+
+data.1 <- wave.1 %>%
+  mutate_if(
+    is.labelled,
+    ~as_factor(.x)
+  )
+
+#dim(data.1)   #8568
+
+
+
+```
+
+
+```{r}
+
+
+# Saving wave3 files as .RDS
+saveRDS(data_sub, here("CATAv2", "R_ob","Cata_data_W3_sub.RDS" ))
+saveRDS(w3_sub_ext, here("CATAv2","R_ob","Cata_data_W3_sub_ext.RDS" ))
+
+# Saving wave 2 files as .RDS
+saveRDS(data.2, here("CATAv2","R_ob","Cata_data_W2.RDS" ))
+
+# Saving wave 1 files as .RDS
+saveRDS(data.1, here("CATAv2","R_ob","Cata_data_W1.RDS" ))
+```
+
+
